@@ -77,7 +77,7 @@ NATIVE_SANITIZER_FLAGS := -O1 -g -fno-omit-frame-pointer -fsanitize=address,unde
 
 .PHONY: test-native-sanitized
 test-native-sanitized:
-	$(MAKE) test-native NATIVE_CXXFLAGS="$(NATIVE_CXXFLAGS) $(NATIVE_SANITIZER_FLAGS)"
+	$(MAKE) -f "$(ROOT_DIR)/Makefile" test-native NATIVE_CXXFLAGS="$(NATIVE_CXXFLAGS) $(NATIVE_SANITIZER_FLAGS)"
 
 .PHONY: test-native
 test-native:
@@ -85,7 +85,11 @@ test-native:
 	@set -euo pipefail; \
 	  output="$$(mktemp -d "$(ROOT_DIR)/.build/native.XXXXXX")"; \
 	  printf 'Output: %s\n' "$$output"; \
-	  { $(CXX) --version; git rev-parse --verify HEAD 2>/dev/null || printf 'Source SHA unavailable\n'; printf 'Flags: %s\n' "$(NATIVE_CXXFLAGS)"; } | tee "$$output/toolchain.txt"; \
+	  { $(CXX) --version; \
+	    [ -e "$(ROOT_DIR)/.git" ] && git -C "$(ROOT_DIR)" rev-parse --verify HEAD 2>/dev/null || \
+	      printf 'Source SHA unavailable\n'; \
+	    printf 'Flags: %s\n' "$(NATIVE_CXXFLAGS)"; \
+	  } | tee "$$output/toolchain.txt"; \
 	  for test in $(NATIVE_TESTS); do \
 	    IFS=: read -r source include binary <<< "$$test"; \
 	    $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension/$$include" \

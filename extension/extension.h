@@ -41,6 +41,12 @@
 #include "sdk/engine/hltvdemo.h"
 #include "sdk/common/netmessages.h"
 
+#if SOURCE_ENGINE == SE_LEFT4DEAD2 && !defined _WIN32
+using ConnectPlayers = CUtlVector<CLC_SplitPlayerConnect>;
+#else
+using ConnectPlayers = CUtlVector<NetMessageCvar_t>;
+#endif
+
 enum ESocketIndex_t
 {
 	NS_INVALID = -1,
@@ -61,6 +67,7 @@ class SMExtension :
 	public SDKExtension
 {
 private:
+	struct RuntimeOperations;
 	bool Load(char* error, size_t maxlength);
 	void Unload();
 	bool SetupFromGameConfig(IGameConfig* gc, char* error, int maxlength);
@@ -95,7 +102,7 @@ public: // SourceHook callbacks
 	void Handler_CHLTVServer_FillServerInfo(SVC_ServerInfo& serverinfo);
 	void Handler_CServerGameEnts_CheckTransmit(CCheckTransmitInfo* pInfo, const unsigned short* pEdictIndices, int nEdicts);
 	IClient* Handler_CHLTVServer_ConnectClient(netadr_t& adr, int protocol, int challenge, int authProtocol, const char* name,
-		const char* password, const char* hashedCDkey, int cdKeyLen, CUtlVector<NetMessageCvar_t>& splitScreenClients, bool isClientLowViolence);
+		const char* password, const char* hashedCDkey, int cdKeyLen, ConnectPlayers& splitScreenClients, bool isClientLowViolence);
 
 public: // SDKExtension
 	/**

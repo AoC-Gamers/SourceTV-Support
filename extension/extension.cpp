@@ -87,7 +87,7 @@ SH_DECL_HOOK0_void(ISteamGameServer, LogOff, SH_NOATTRIB, 0);
 #endif
 SH_DECL_HOOK3_void(IServerGameEnts, CheckTransmit, SH_NOATTRIB, 0, CCheckTransmitInfo*, const unsigned short*, int);
 SH_DECL_MANUALHOOK10(CHLTVServer_ConnectClient, 0, 0, 0, IClient*, netadr_t&, int, int, int, const char*,
-	const char*, const char*, int, CUtlVector<NetMessageCvar_t>&, bool);
+	const char*, const char*, int, ConnectPlayers&, bool);
 
 // Detours
 #include <CDetour/detours.h>
@@ -338,64 +338,80 @@ bool SMExtension::CreateVCalls(char* error, size_t maxlength)
 	return true;
 }
 
+struct SMExtension::RuntimeOperations {
+	SMExtension& owner;
+	char* error = nullptr;
+	size_t maxlength = 0;
+
+	bool BindSteam() { return owner.SetupFromSteamAPILibrary(error, maxlength); }
+	bool CreateDetours() { return owner.CreateDetours(error, maxlength); }
+	bool CreateVCalls() { return owner.CreateVCalls(error, maxlength); }
+	bool BindHLTV() { return owner.BindHLTVServer(hltvdirector->GetHLTVServer(), error, maxlength); }
+	bool HookSteamLogOff() { return owner.BindSteamLogOff(error, maxlength); }
+	bool EnableDetours() { return owner.EnableDetours(error, maxlength); }
+
+	bool ResolveGameServer()
+	{
+		g_pGameIServer = sdktools->GetIServer();
+		if (g_pGameIServer)
+			return true;
+		ke::SafeStrcpy(error, maxlength, "Unable to retrieve the game IServer from SDKTools");
+		return false;
+	}
+
+	bool HookDirector()
+	{
+		const int hook = SH_ADD_HOOK(IHLTVDirector, SetHLTVServer, hltvdirector,
+			SH_MEMBER(&owner, &SMExtension::Handler_CHLTVDirector_SetHLTVServer), true);
+		if (owner.m_Resources.Take<RemoveHook>(owner.m_DirectorHook, hook))
+			return true;
+		ke::SafeStrcpy(error, maxlength, "Unable to hook IHLTVDirector::SetHLTVServer");
+		return false;
+	}
+
+	void RepairHLTV()
+	{
+		if (g_pHLTVServer)
+			owner.RepairHLTVServer(g_pHLTVServer);
+#ifdef TV_RELAYTEST
+		static ConVarRef clientport("clientport");
+		InvokeOpenSocketInternal(NS_CLIENT, clientport.GetInt(), PORT_SERVER, "client", true);
+#endif
+	}
+
+	void RegisterLibrary() { sharesys->RegisterLibrary(myself, "sourcetvsupport"); }
+
+	void DisableDetours()
+	{
+		g_pHLTVServer = nullptr;
+		for (auto it = std::rbegin(detours); it != std::rend(detours); ++it) {
+			if (it->detour && it->detour->IsEnabled())
+				it->detour->DisableDetour();
+		}
+	}
+
+	void UnhookSteam() { owner.m_SteamHooks.Reset(); }
+	void UnhookHLTV() { owner.m_HLTVHooks.Reset(); }
+	void ReleaseResources() { owner.m_Resources.Reset(); }
+	void ClearBindings()
+	{
+		for (const auto& binding : detours)
+			*binding.trampoline = nullptr;
+		g_pGameIServer = nullptr;
+		owner.ClearSteamBindings();
+	}
+};
+
 bool SMExtension::Load(char* error, size_t maxlength)
 {
-	const bool started = m_Lifecycle.Start([this] { Unload(); },
-		[&] {
-			g_pGameIServer = sdktools->GetIServer();
-			if (g_pGameIServer)
-				return true;
-			ke::SafeStrcpy(error, maxlength, "Unable to retrieve the game IServer from SDKTools");
-			return false;
-		},
-		[&] { return CreateVCalls(error, maxlength); },
-		[&] {
-			const int hook = SH_ADD_HOOK(IHLTVDirector, SetHLTVServer, hltvdirector,
-				SH_MEMBER(this, &SMExtension::Handler_CHLTVDirector_SetHLTVServer), true);
-			if (m_Resources.Take<RemoveHook>(m_DirectorHook, hook))
-				return true;
-			ke::SafeStrcpy(error, maxlength, "Unable to hook IHLTVDirector::SetHLTVServer");
-			return false;
-		},
-		[&] { return BindHLTVServer(hltvdirector->GetHLTVServer(), error, maxlength); },
-		[&] { return BindSteamLogOff(error, maxlength); },
-		[&] { return EnableDetours(error, maxlength); });
-	if (!started)
-		return false;
-
-	if (g_pHLTVServer)
-		RepairHLTVServer(g_pHLTVServer);
-
-#ifdef TV_RELAYTEST
-	static ConVarRef clientport("clientport");
-	InvokeOpenSocketInternal(NS_CLIENT, clientport.GetInt(), PORT_SERVER, "client", true);
-#endif
-	if (!m_Lifecycle.IsActive())
-		return false;
-
-	sharesys->RegisterLibrary(myself, "sourcetvsupport");
-	return true;
+	RuntimeOperations runtime{*this, error, maxlength};
+	return m_Lifecycle.Start(runtime);
 }
 
 void SMExtension::Unload()
 {
-	m_Lifecycle.Stop(
-		[] {
-			g_pHLTVServer = nullptr;
-			for (auto it = std::rbegin(detours); it != std::rend(detours); ++it) {
-				if (it->detour && it->detour->IsEnabled())
-					it->detour->DisableDetour();
-			}
-		},
-		[this] { m_SteamHooks.Reset(); },
-		[this] { m_HLTVHooks.Reset(); },
-		[this] { m_Resources.Reset(); },
-		[this] {
-			for (const auto& binding : detours)
-				*binding.trampoline = nullptr;
-			g_pGameIServer = nullptr;
-			ClearSteamBindings();
-		});
+	RuntimeOperations runtime{*this};
+	m_Lifecycle.Stop(runtime);
 }
 
 bool SMExtension::BindSteamLogOff(char* error, size_t maxlength)
@@ -574,7 +590,7 @@ void SMExtension::Handler_ISteamGameServer_LogOff()
 }
 
 IClient* SMExtension::Handler_CHLTVServer_ConnectClient(netadr_t& adr, int protocol, int challenge, int authProtocol, const char* name,
-	const char* password, const char* hashedCDkey, int cdKeyLen, CUtlVector<NetMessageCvar_t>& splitScreenClients, bool isClientLowViolence)
+	const char* password, const char* hashedCDkey, int cdKeyLen, ConnectPlayers& splitScreenClients, bool isClientLowViolence)
 {
 	if (splitScreenClients.Count() > 1)
 	{
@@ -635,9 +651,8 @@ bool SMExtension::SDK_OnLoad(char* error, size_t maxlength, bool late)
 	SH_MANUALHOOK_RECONFIGURE(CHLTVServer_ConnectClient, CBaseServer::vtblindex_ConnectClient->Index(), 0, 0);
 
 	// Retrieve addresses from steam_api shared library
-	if (!m_Lifecycle.Prepare([this] { Unload(); },
-		[&] { return SetupFromSteamAPILibrary(error, maxlength); },
-		[&] { return CreateDetours(error, maxlength); }))
+	RuntimeOperations runtime{*this, error, maxlength};
+	if (!m_Lifecycle.Prepare(runtime))
 		return false;
 	m_LifecycleError[0] = '\0';
 

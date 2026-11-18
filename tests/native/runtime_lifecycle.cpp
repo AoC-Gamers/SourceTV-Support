@@ -94,76 +94,145 @@ void TestPreparationAndProviderDrop()
 	}
 }
 
-void TestLifecycleOrchestration()
-{
-	constexpr int detours = 8;
-	constexpr int stages = 5;
-	for (int failAt = 0; failAt <= 2 * detours + stages; ++failAt) {
-		sourcetv::RuntimeLifecycle runtime;
-		std::array<int, detours> bindings{};
-		int created = 0;
-		int enabled = 0;
-		int attempts = 0;
-		int stops = 0;
-		std::vector<int> teardown;
-		providerAlive = true;
-		auto succeed = [&] { return attempts++ != failAt; };
-		auto stop = [&] {
-			runtime.Stop(
-				[&] {
-					assert(!runtime.IsActive());
-					while (enabled)
-						teardown.push_back(enabled--);
-				},
-				[&] {
-					assert(providerAlive);
-					assert(!enabled);
-					created = 0;
-					++stops;
-				});
-		};
+struct LifecycleProvider {
+	sourcetv::RuntimeLifecycle& lifecycle;
+	int failAt;
+	int attempts = 0;
+	int published = 0;
+	int repairs = 0;
+	bool providerAvailable = true;
+	bool retireDuringRepair = false;
 
-		bool prepared = runtime.Prepare(stop, [&] {
-			return sourcetv::ApplyRuntimeBindings(bindings, [&](int) {
-				if (!succeed())
-					return false;
-				++created;
-				return true;
-			});
-		});
-		assert(prepared == (failAt >= detours));
-		assert(runtime.IsPrepared() == prepared && !runtime.IsActive());
-		const bool started = runtime.Start(stop, succeed, succeed, succeed, succeed, succeed, [&] {
-			return sourcetv::ApplyRuntimeBindings(bindings, [&](int) {
-				assert(created == detours);
-				if (!succeed())
-					return false;
-				++enabled;
-				return true;
-			});
-		});
+	LifecycleProvider(sourcetv::RuntimeLifecycle& state, int fail) : lifecycle(state), failAt(fail) {}
 
-		assert(started == (failAt == 2 * detours + stages));
-		assert(runtime.IsActive() == started);
-		assert(attempts == std::min(failAt + 1, 2 * detours + stages));
-		if (started) {
-			assert(stops == 0);
-			assert(runtime.CanDropSDKTools(true));
-			runtime.DropSDKTools(true, stop, [] {});
-			assert(runtime.IsActive());
-			runtime.DropBinTools(stop, [] { providerAlive = false; });
-			assert(!providerAlive);
-		}
-		assert(stops == 1 && !created && !enabled && !runtime.IsActive());
-		assert(!runtime.IsPrepared() && !runtime.CanDropSDKTools(true));
-		assert(std::is_sorted(teardown.rbegin(), teardown.rend()));
+	std::vector<int> detours;
+	std::vector<int> enabled;
+	std::vector<int> calls;
+	std::vector<int> hltvHooks;
+	std::vector<int> steamHooks;
+	std::vector<int> bindings;
+	std::vector<int> acquired;
+	std::vector<int> released;
+
+	bool Take(std::vector<int>& resources, int id)
+	{
+		assert(!lifecycle.IsActive() && !published);
+		if (attempts++ == failAt)
+			return false;
+		acquired.push_back(id);
+		resources.push_back(id);
+		return true;
 	}
 
-	sourcetv::RuntimeLifecycle runtime;
-	int releases = 0;
-	assert(runtime.Prepare([] {}, [] { return true; }));
-	runtime.DropSDKTools(false, [&] { runtime.Stop([&] { ++releases; }); }, [] {});
-	assert(releases == 1 && !runtime.IsPrepared());
+	bool TakeRange(std::vector<int>& resources, int first, int count)
+	{
+		for (int i = 0; i < count; ++i) {
+			if (!Take(resources, first + i))
+				return false;
+		}
+		return true;
+	}
+
+	bool BindSteam() { return Take(bindings, 1); }
+	bool CreateDetours() { return TakeRange(detours, 10, 8); }
+	bool ResolveGameServer() { return Take(bindings, 2); }
+	bool CreateVCalls() { return TakeRange(calls, 20, 2); }
+	bool HookDirector() { return Take(calls, 22); }
+	bool BindHLTV() { return TakeRange(hltvHooks, 30, 7); }
+	bool HookSteamLogOff() { return Take(steamHooks, 40); }
+	bool EnableDetours()
+	{
+		assert(detours.size() == 8 && calls.size() == 3 && hltvHooks.size() == 7);
+		return TakeRange(enabled, 50, 8);
+	}
+
+	void RepairHLTV()
+	{
+		assert(lifecycle.IsActive() && enabled.size() == 8 && !published);
+		++repairs;
+		if (retireDuringRepair)
+			lifecycle.Stop(*this);
+	}
+
+	void RegisterLibrary()
+	{
+		assert(lifecycle.IsActive() && repairs == 1 && enabled.size() == 8);
+		++published;
+	}
+
+	void Release(std::vector<int>& resources)
+	{
+		assert(!lifecycle.IsActive());
+		released.insert(released.end(), resources.rbegin(), resources.rend());
+		resources.clear();
+	}
+
+	void DisableDetours() { Release(enabled); }
+	void UnhookSteam() { Release(steamHooks); }
+	void UnhookHLTV() { Release(hltvHooks); }
+	void ReleaseResources()
+	{
+		assert(enabled.empty() && steamHooks.empty() && hltvHooks.empty());
+		assert(calls.empty() || providerAvailable);
+		Release(calls);
+		Release(detours);
+	}
+	void ClearBindings()
+	{
+		assert(detours.empty() && calls.empty());
+		Release(bindings);
+	}
+};
+
+void TestLifecycleOrchestration()
+{
+	const std::vector<int> expectedAcquisition{
+		1, 10, 11, 12, 13, 14, 15, 16, 17, 2, 20, 21, 22, 30, 31, 32, 33, 34, 35, 36, 40,
+		50, 51, 52, 53, 54, 55, 56, 57,
+	};
+	const std::vector<int> expectedRelease{
+		57, 56, 55, 54, 53, 52, 51, 50, 40, 36, 35, 34, 33, 32, 31, 30, 22, 21, 20,
+		17, 16, 15, 14, 13, 12, 11, 10, 2, 1,
+	};
+	const int total = static_cast<int>(expectedAcquisition.size());
+	for (int failAt = 0; failAt <= total; ++failAt) {
+		sourcetv::RuntimeLifecycle lifecycle;
+		LifecycleProvider runtime{lifecycle, failAt};
+		assert(lifecycle.Prepare(runtime) == (failAt >= 9));
+		assert(!lifecycle.IsActive() && !runtime.published);
+		const bool started = lifecycle.Start(runtime);
+		assert(started == (failAt == total));
+		assert(lifecycle.IsActive() == started && runtime.published == started);
+		assert(runtime.attempts == std::min(failAt + 1, total));
+		assert(runtime.acquired == std::vector<int>(expectedAcquisition.begin(), expectedAcquisition.begin() + failAt));
+
+		if (started) {
+			auto stop = [&] { lifecycle.Stop(runtime); };
+			lifecycle.DropSDKTools(true, stop, [] {});
+			assert(lifecycle.IsActive());
+			lifecycle.DropBinTools(stop, [&] { runtime.providerAvailable = false; });
+			assert(!runtime.providerAvailable);
+		}
+		lifecycle.Stop(runtime);
+		assert(!lifecycle.IsActive() && !lifecycle.IsPrepared());
+		std::vector<int> expected;
+		for (int resource : expectedRelease) {
+			if (std::find(runtime.acquired.begin(), runtime.acquired.end(), resource) != runtime.acquired.end())
+				expected.push_back(resource);
+		}
+		assert(runtime.released == expected);
+	}
+
+	sourcetv::RuntimeLifecycle lifecycle;
+	LifecycleProvider runtime{lifecycle, -1};
+	assert(lifecycle.Prepare(runtime));
+	lifecycle.DropSDKTools(false, [&] { lifecycle.Stop(runtime); }, [] {});
+	assert(!lifecycle.IsPrepared() && runtime.released.size() == 9);
+
+	assert(lifecycle.Prepare(runtime));
+	runtime.retireDuringRepair = true;
+	assert(!lifecycle.Start(runtime));
+	assert(!lifecycle.IsActive() && !runtime.published);
 }
 
 void TestRuntimeRebinding()

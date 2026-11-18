@@ -9,35 +9,45 @@ public:
 	bool IsActive() const { return phase_ == Phase::Active; }
 	bool IsPrepared() const { return phase_ == Phase::Prepared; }
 
-	template <class Cleanup, class... Stage>
-	bool Prepare(Cleanup cleanup, Stage... stage)
+	template <class Runtime>
+	bool Prepare(Runtime& runtime)
 	{
-		if (!(stage() && ...)) {
-			Stop(cleanup);
+		if (!runtime.BindSteam() || !runtime.CreateDetours()) {
+			Stop(runtime);
 			return false;
 		}
 		phase_ = Phase::Prepared;
 		return true;
 	}
 
-	template <class Cleanup, class... Stage>
-	bool Start(Cleanup cleanup, Stage... stage)
+	template <class Runtime>
+	bool Start(Runtime& runtime)
 	{
 		if (!IsPrepared())
 			return false;
-		if (!(stage() && ...)) {
-			Stop(cleanup);
+		if (!runtime.ResolveGameServer() || !runtime.CreateVCalls() ||
+		    !runtime.HookDirector() || !runtime.BindHLTV() ||
+		    !runtime.HookSteamLogOff() || !runtime.EnableDetours()) {
+			Stop(runtime);
 			return false;
 		}
 		phase_ = Phase::Active;
+		runtime.RepairHLTV();
+		if (!IsActive())
+			return false;
+		runtime.RegisterLibrary();
 		return true;
 	}
 
-	template <class... Cleanup>
-	void Stop(Cleanup... cleanup)
+	template <class Runtime>
+	void Stop(Runtime& runtime)
 	{
 		phase_ = Phase::Stopped;
-		(cleanup(), ...);
+		runtime.DisableDetours();
+		runtime.UnhookSteam();
+		runtime.UnhookHLTV();
+		runtime.ReleaseResources();
+		runtime.ClearBindings();
 	}
 
 	bool CanDropSDKTools(bool gameServerResolved) const
