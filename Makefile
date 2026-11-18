@@ -31,9 +31,11 @@ help:
 	  'make validate-artifact-<linux|windows> Verificar staging y ZIP contra el build' \
 	  'make test                            Probar el contrato de distribución' \
 	  'make test-public-api                 Comparar el contrato público congelado' \
+	  'make test-native-sanitized           Ejecutar pruebas nativas con ASan y UBSan' \
 	  'make test-native                     Ejecutar pruebas C++ puras (x86 por defecto)' \
 	  'make test-abi                        Ejecutar el probe de ABI Linux x86' \
 	  'make test-coverage                   Medir cobertura local C++ y Python' \
+	  'make test-coverage-tooling           Validar localmente el recibo de cobertura' \
 	  'make test-vsp                        Probar el VSP compilado con el SDK Linux x86' \
 	  'make sonar-cppcheck / sonar          Analizar el build Linux localmente' \
 	  'make clean-<linux|windows>            Limpiar la salida de AMBuild'
@@ -70,6 +72,12 @@ test:
 	$(PYTHON) -B -m unittest discover -s "$(ROOT_DIR)/tests/package"
 
 NATIVE_CXXFLAGS ?= -m32 -std=c++17 -Wall -Wextra
+NATIVE_TESTS := frame_retention:.:test-native demo_payload:.:demo_payload transmission_policy:.:transmission_policy runtime_lifecycle:.:runtime_lifecycle
+NATIVE_SANITIZER_FLAGS := -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie
+
+.PHONY: test-native-sanitized
+test-native-sanitized:
+	$(MAKE) test-native NATIVE_CXXFLAGS="$(NATIVE_CXXFLAGS) $(NATIVE_SANITIZER_FLAGS)"
 
 .PHONY: test-native
 test-native:
@@ -77,19 +85,13 @@ test-native:
 	@set -euo pipefail; \
 	  output="$$(mktemp -d "$(ROOT_DIR)/.build/native.XXXXXX")"; \
 	  printf 'Output: %s\n' "$$output"; \
-	  { $(CXX) --version; printf 'Flags: %s\n' "$(NATIVE_CXXFLAGS)"; } | tee "$$output/toolchain.txt"; \
-	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
-	    "$(ROOT_DIR)/tests/native/frame_retention.cpp" -o "$$output/test-native"; \
-	  "$$output/test-native" | tee "$$output/result.txt"; \
-	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
-	    "$(ROOT_DIR)/tests/native/demo_payload.cpp" -o "$$output/demo_payload"; \
-	  "$$output/demo_payload" | tee -a "$$output/result.txt"; \
-	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
-	    "$(ROOT_DIR)/tests/native/transmission_policy.cpp" -o "$$output/transmission_policy"; \
-	  "$$output/transmission_policy" | tee -a "$$output/result.txt"; \
-	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
-	    "$(ROOT_DIR)/tests/native/runtime_lifecycle.cpp" -o "$$output/runtime_lifecycle"; \
-	  "$$output/runtime_lifecycle" | tee -a "$$output/result.txt"
+	  { $(CXX) --version; git rev-parse --verify HEAD 2>/dev/null || printf 'Source SHA unavailable\n'; printf 'Flags: %s\n' "$(NATIVE_CXXFLAGS)"; } | tee "$$output/toolchain.txt"; \
+	  for test in $(NATIVE_TESTS); do \
+	    IFS=: read -r source include binary <<< "$$test"; \
+	    $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension/$$include" \
+	      "$(ROOT_DIR)/tests/native/$$source.cpp" -o "$$output/$$binary"; \
+	    "$$output/$$binary" | tee -a "$$output/result.txt"; \
+	  done
 
 
 sonar:
@@ -154,8 +156,14 @@ test-vsp: build-exts-linux
 	  test "$$(grep -Fxc '[STVS] VSP early setup complete: 3 of 24 cvars available (21 missing). Exiting as intended.' "$$output/stdout.txt")" = 2
 
 COVERAGE_PYTHON ?= $(PYTHON)
+GCOV ?= gcov
 
 .PHONY: test-coverage
 test-coverage: PLATFORM := linux
+.PHONY: test-coverage-tooling
+test-coverage-tooling:
+	$(PYTHON) -B -m unittest discover -s "$(ROOT_DIR)/tests/tools"
+
 test-coverage: build-exts-linux
-	$(PYTHON) "$(SCRIPT_DIR)/tools/local_coverage.py" --compile-commands "$(BUILD_DIR)/compile_commands.json" --coverage-python "$(COVERAGE_PYTHON)"
+	$(PYTHON) "$(SCRIPT_DIR)/tools/local_coverage.py" --compile-commands "$(BUILD_DIR)/compile_commands.json" --coverage-python "$(COVERAGE_PYTHON)" \
+	  --cxx="$(CXX)" --native-flags="$(NATIVE_CXXFLAGS)" --native-tests="$(NATIVE_TESTS)" --gcov="$(GCOV)"

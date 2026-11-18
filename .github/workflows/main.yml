@@ -76,7 +76,12 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Preparar toolchain Linux x86
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y make g++-multilib
       - run: make test-ci PYTHON=python
+      - run: make test-native-sanitized
 
   build:
     if: github.event_name != 'pull_request'
@@ -136,7 +141,7 @@ jobs:
         run: |
           make "deps-exts-$PLATFORM" PYTHON=python
           make "build-exts-$PLATFORM" PYTHON=python
-          if [[ "$PLATFORM" == linux ]]; then make test-vsp PYTHON=python; fi
+          if [[ "$PLATFORM" == linux ]]; then make test-abi test-vsp PYTHON=python; fi
           make "package-exts-$PLATFORM" PYTHON=python
           make "release-$PLATFORM" PYTHON=python
           make "validate-artifact-$PLATFORM" PYTHON=python

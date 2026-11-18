@@ -10,6 +10,9 @@
 
 ### Corregido
 
+- Un fallo al preparar o activar la extensión revierte las adquisiciones
+  parciales, incluido el enlace con el servidor HLTV.
+
 - **Demos.** Un registro de tablas o clases que excede el buffer o contiene
   datos inválidos se descarta con un diagnóstico antes de escribir al archivo.
 
@@ -33,6 +36,11 @@
 - **INCOMPATIBLE.** Se retira Left 4 Dead del build y de los instaladores. Usa este ZIP únicamente con Left 4 Dead 2.
 
 ### Desarrollo
+
+- CI ejecuta las regresiones nativas Linux x86 con ASan y UBSan y prueba
+  las fronteras que usan el SDK en el job de compilación.
+- El recibo de cobertura local detecta cambios en headers, dependencias,
+  órdenes, toolchain y pruebas antes de importar los informes.
 
 - Cada push a `develop` publica la prerelease con los ZIP validados de Linux y Windows.
 

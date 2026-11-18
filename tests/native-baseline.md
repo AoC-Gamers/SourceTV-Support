@@ -53,7 +53,33 @@ de invocaciones, layouts y efectos requiere módulos identificados por plataform
 probes x86 con proveedores independientes y ensayos acotados de SourceHook,
 BinTools y SRCDS. Un perfil de Windows no se deriva del binario Linux.
 
-## Comprobaciones locales
+### Correlación de receptor y slots en el ELF identificado
+
+En L4D2 2.2.4.3, build 10097, el ELF anterior tiene `ConnectClient` en
+el slot 51 del subobjeto `CBaseServer`. La entrada de `CHLTVServer` en
+`0x2a2620` apunta al thunk `0x1645e0`, que resta 4 al receptor en la pila.
+`CHLTVServer::ConnectClient` suma 4 al receptor antes de llamar a
+`CBaseServer::ConnectClient`. El desensamblado muestra parámetros en la pila
+y retorno en EAX. El símbolo identifica referencias a `netadr_s` mutable y
+a un vector de objetos `CLC_SplitPlayerConnect`. Queda pendiente comprobar
+la llamada de los handlers a través de la cadena de SourceHook con un cliente
+y el acceso a la representación del vector.
+
+En la vtable de `CHLTVDemoRecorder`, el address point `0x2a16e8` contiene
+`GetDemoFile` en el slot 0, `GetRecordingTick` en el 1, `StartRecording`
+en el 2, `IsRecording` en el 4 y `StopRecording` en el 7. Los slots 12 y 13
+son `RecordServerClasses` y `RecordStringTables`. `GetDemoFile` devuelve
+el subobjeto en `this + 4`, que también recibe `CDemoFile::Close`.
+`CDemoFile::Open` copia el nombre al offset 0 con límite de 260 bytes y
+usa el stream buffer en `0x534` en esa copia del motor. Se requiere
+corroboración separada del tamaño completo de las estructuras y frames.
+
+La DLL PE32 x86 de la instalación local del cliente lleva SHA-256
+`8a6d468059394bf4cfce32f11dcba12ef45de88da1373084d5a2916d0bf7ba86`. El
+contrato del SRCDS dedicado Windows sigue pendiente de identificar. Se
+conservan las firmas existentes y los offsets de gamedata de ambas plataformas.
+
+## Resultados históricos de la extracción
 
 | Nivel | Resultado |
 |---|---|

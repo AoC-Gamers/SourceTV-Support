@@ -30,6 +30,7 @@
 #include <sourcehook.h>
 
 #include "runtime_resources.h"
+#include "runtime_lifecycle.h"
 
 #if defined _WIN32
 #	define LIBSTEAMAPI_FILE "steam_api.dll"
@@ -60,8 +61,6 @@ class SMExtension :
 	public SDKExtension
 {
 private:
-	enum class Phase { Stopped, Prepared, Active };
-
 	bool Load(char* error, size_t maxlength);
 	void Unload();
 	bool SetupFromGameConfig(IGameConfig* gc, char* error, int maxlength);
@@ -75,7 +74,7 @@ private:
 	bool BindSteamLogOff(char* error, size_t maxlength);
 	void FailRuntime();
 
-	Phase m_Phase = Phase::Stopped;
+	sourcetv::RuntimeLifecycle m_Lifecycle;
 	char m_LifecycleError[256]{};
 	int m_DirectorHook = 0;
 	int m_LogOffHook = 0;

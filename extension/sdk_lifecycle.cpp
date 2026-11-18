@@ -30,7 +30,7 @@ void SMExtension::FailRuntime()
 
 void SMExtension::SDK_OnAllLoaded()
 {
-	if (m_Phase != Phase::Prepared)
+	if (!m_Lifecycle.IsPrepared())
 		return;
 
 	SM_GET_LATE_IFACE(SDKTOOLS, sdktools);
@@ -70,7 +70,7 @@ bool SMExtension::QueryInterfaceDrop(SMInterface* interface)
 		return false;
 
 	if (sdktools && sdktools == interface)
-		return m_Phase == Phase::Active && g_pGameIServer;
+		return m_Lifecycle.CanDropSDKTools(g_pGameIServer != nullptr);
 
 	return IExtensionInterface::QueryInterfaceDrop(interface);
 }
@@ -81,21 +81,19 @@ void SMExtension::NotifyInterfaceDrop(SMInterface* interface)
 		// SourceMod notifies dependents before unloading the provider module.
 		// The call wrappers can still destroy themselves here.
 		ke::SafeStrcpy(m_LifecycleError, sizeof(m_LifecycleError), "BinTools was unloaded");
-		Unload();
-		bintools = nullptr;
+		m_Lifecycle.DropBinTools([this] { Unload(); }, [] { bintools = nullptr; });
 	} else if (sdktools && sdktools == interface) {
-		sdktools = nullptr;
 		// SDKTools only supplies the pointer. The engine owns the game server.
-		if (m_Phase != Phase::Active || !g_pGameIServer) {
+		m_Lifecycle.DropSDKTools(g_pGameIServer != nullptr, [this] {
 			ke::SafeStrcpy(m_LifecycleError, sizeof(m_LifecycleError), "SDKTools was unloaded before resolving IServer");
 			Unload();
-		}
+		}, [] { sdktools = nullptr; });
 	}
 }
 
 bool SMExtension::QueryRunning(char* error, size_t maxlength)
 {
-	if (m_Phase == Phase::Active)
+	if (m_Lifecycle.IsActive())
 		return true;
 
 	if (error && maxlength) {

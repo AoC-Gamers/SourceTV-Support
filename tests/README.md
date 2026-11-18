@@ -22,8 +22,9 @@ La prueba de SRCDS cubre actualización de PVS, entidades ausentes y liberación
 de frames al cambiar de mapa. En Linux usa un compilador C++17 con multilib
 x86 por defecto. Se puede seleccionar el compilador mediante `CXX` y los flags
 mediante `NATIVE_CXXFLAGS`. Cada ejecución crea su propio directorio en
-`.build/` y guarda el compilador, flags y resultado. La suite es local y no
-requiere SDK ni ejecuta SourceHook, VM o SRCDS.
+`.build/` y guarda el compilador, flags y resultado. La suite pura se ejecuta en CI
+mediante `make test-native-sanitized` con ASan y UBSan. Funciona sin SDK y
+los proveedores controlados se prueban por separado del motor.
 
 La extensión compila [composición y registro](../extension/extension.cpp),
 [resolución](../extension/bindings.cpp), [ciclo de vida de interfaces](../extension/sdk_lifecycle.cpp),
@@ -46,9 +47,11 @@ Los campos escritos como short deben caber en el rango positivo con signo.
 Una demo con un registro descartado puede quedar incompleta. La reproducción
 en el cliente L4D2 requiere una prueba de runtime por plataforma.
 
-`make test-native` también inyecta fallos de adquisición con dobles para
-comprobar el orden de rollback y la parada repetida. Comprueba que se destruyan
-los call wrappers mientras su proveedor sigue disponible y que el adaptador
+`make test-native` también ejecuta la orquestación que usa la extensión
+para preparar, activar, volver a enlazar HLTV y detener el runtime. Usa
+dobles para inyectar fallos de adquisición y habilitación, comprobar la fase
+y verificar el rollback y la parada repetida. Comprueba que se destruyan los
+call wrappers mientras su proveedor sigue disponible y que el adaptador
 de inicialización de Steam llame una vez al original, conserve su resultado y
 respete el puerto de consulta, incluidos los extremos.
 

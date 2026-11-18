@@ -285,26 +285,26 @@ const DetourBinding detours[] = {
 bool SMExtension::CreateDetours(char* error, size_t maxlength)
 {
 	CDetourManager::Init(smutils->GetScriptingEngine(), nullptr);
-	for (const auto& binding : detours) {
+	return sourcetv::ApplyRuntimeBindings(detours, [&](const DetourBinding& binding) {
 		auto* detour = CDetourManager::CreateDetour(binding.callback, binding.trampoline, binding.target);
 		if (!m_Resources.Take<DestroyDetour>(binding.detour, detour)) {
 			ke::SafeSprintf(error, maxlength, "Unable to create detour for %s", binding.name);
 			return false;
 		}
-	}
-	return true;
+		return true;
+	});
 }
 
 bool SMExtension::EnableDetours(char* error, size_t maxlength)
 {
-	for (const auto& binding : detours) {
+	return sourcetv::ApplyRuntimeBindings(detours, [&](const DetourBinding& binding) {
 		binding.detour->EnableDetour();
 		if (!binding.detour->IsEnabled()) {
 			ke::SafeSprintf(error, maxlength, "Unable to enable detour for %s", binding.name);
 			return false;
 		}
-	}
-	return true;
+		return true;
+	});
 }
 
 bool SMExtension::CreateVCalls(char* error, size_t maxlength)
@@ -340,27 +340,29 @@ bool SMExtension::CreateVCalls(char* error, size_t maxlength)
 
 bool SMExtension::Load(char* error, size_t maxlength)
 {
-	g_pGameIServer = sdktools->GetIServer();
-	if (!g_pGameIServer) {
-		ke::SafeStrcpy(error, maxlength, "Unable to retrieve the game IServer from SDKTools");
+	const bool started = m_Lifecycle.Start([this] { Unload(); },
+		[&] {
+			g_pGameIServer = sdktools->GetIServer();
+			if (g_pGameIServer)
+				return true;
+			ke::SafeStrcpy(error, maxlength, "Unable to retrieve the game IServer from SDKTools");
+			return false;
+		},
+		[&] { return CreateVCalls(error, maxlength); },
+		[&] {
+			const int hook = SH_ADD_HOOK(IHLTVDirector, SetHLTVServer, hltvdirector,
+				SH_MEMBER(this, &SMExtension::Handler_CHLTVDirector_SetHLTVServer), true);
+			if (m_Resources.Take<RemoveHook>(m_DirectorHook, hook))
+				return true;
+			ke::SafeStrcpy(error, maxlength, "Unable to hook IHLTVDirector::SetHLTVServer");
+			return false;
+		},
+		[&] { return BindHLTVServer(hltvdirector->GetHLTVServer(), error, maxlength); },
+		[&] { return BindSteamLogOff(error, maxlength); },
+		[&] { return EnableDetours(error, maxlength); });
+	if (!started)
 		return false;
-	}
 
-	if (!CreateVCalls(error, maxlength))
-		return false;
-
-	const int directorHook = SH_ADD_HOOK(IHLTVDirector, SetHLTVServer, hltvdirector,
-		SH_MEMBER(this, &SMExtension::Handler_CHLTVDirector_SetHLTVServer), true);
-	if (!m_Resources.Take<RemoveHook>(m_DirectorHook, directorHook)) {
-		ke::SafeStrcpy(error, maxlength, "Unable to hook IHLTVDirector::SetHLTVServer");
-		return false;
-	}
-
-	if (!BindHLTVServer(hltvdirector->GetHLTVServer(), error, maxlength) ||
-		!BindSteamLogOff(error, maxlength) || !EnableDetours(error, maxlength))
-		return false;
-
-	m_Phase = Phase::Active;
 	if (g_pHLTVServer)
 		RepairHLTVServer(g_pHLTVServer);
 
@@ -368,7 +370,7 @@ bool SMExtension::Load(char* error, size_t maxlength)
 	static ConVarRef clientport("clientport");
 	InvokeOpenSocketInternal(NS_CLIENT, clientport.GetInt(), PORT_SERVER, "client", true);
 #endif
-	if (m_Phase != Phase::Active)
+	if (!m_Lifecycle.IsActive())
 		return false;
 
 	sharesys->RegisterLibrary(myself, "sourcetvsupport");
@@ -377,21 +379,23 @@ bool SMExtension::Load(char* error, size_t maxlength)
 
 void SMExtension::Unload()
 {
-	m_Phase = Phase::Stopped;
-	g_pHLTVServer = nullptr;
-	for (size_t i = sizeof(detours) / sizeof(detours[0]); i > 0; --i) {
-		auto* detour = detours[i - 1].detour;
-		if (detour && detour->IsEnabled())
-			detour->DisableDetour();
-	}
-	m_SteamHooks.Reset();
-	m_HLTVHooks.Reset();
-	m_Resources.Reset();
-	for (const auto& binding : detours)
-		*binding.trampoline = nullptr;
-
-	g_pGameIServer = nullptr;
-	ClearSteamBindings();
+	m_Lifecycle.Stop(
+		[] {
+			g_pHLTVServer = nullptr;
+			for (auto it = std::rbegin(detours); it != std::rend(detours); ++it) {
+				if (it->detour && it->detour->IsEnabled())
+					it->detour->DisableDetour();
+			}
+		},
+		[this] { m_SteamHooks.Reset(); },
+		[this] { m_HLTVHooks.Reset(); },
+		[this] { m_Resources.Reset(); },
+		[this] {
+			for (const auto& binding : detours)
+				*binding.trampoline = nullptr;
+			g_pGameIServer = nullptr;
+			ClearSteamBindings();
+		});
 }
 
 bool SMExtension::BindSteamLogOff(char* error, size_t maxlength)
@@ -423,7 +427,7 @@ bool SMExtension::BindSteamLogOff(char* error, size_t maxlength)
 
 void SMExtension::OnGameServerInitResult(bool initialized)
 {
-	if (m_Phase != Phase::Active)
+	if (!m_Lifecycle.IsActive())
 		return;
 	if (!initialized) {
 		m_SteamHooks.Reset();
@@ -435,52 +439,46 @@ void SMExtension::OnGameServerInitResult(bool initialized)
 
 bool SMExtension::BindHLTVServer(IHLTVServer* server, char* error, size_t maxlength)
 {
-	g_pHLTVServer = nullptr;
-	m_HLTVHooks.Reset();
-	if (!server)
-		return true;
+	return sourcetv::BindRuntimeServer(g_pHLTVServer, server, [this] { m_HLTVHooks.Reset(); },
+		[&](IHLTVServer* server) {
+			CBaseServer* base = CBaseServer::FromIHLTVServer(server);
+			if (!base) {
+				ke::SafeStrcpy(error, maxlength, "Unable to obtain the HLTV base server");
+				return false;
+			}
+			CHLTVServer* hltv = CHLTVServer::FromBaseServer(base);
+			if (!hltv) {
+				ke::SafeStrcpy(error, maxlength, "Unresolved CHLTVServer base adjustment");
+				return false;
+			}
+			CHLTVDemoRecorder& recorder = hltv->m_DemoRecorder();
+			const auto track = [&](int& slot, int id, const char* name) {
+				if (m_HLTVHooks.Take<RemoveHook>(slot, id))
+					return true;
+				ke::SafeSprintf(error, maxlength, "Unable to hook %s", name);
+				return false;
+			};
 
-	CBaseServer* base = CBaseServer::FromIHLTVServer(server);
-	if (!base) {
-		ke::SafeStrcpy(error, maxlength, "Unable to obtain the HLTV base server");
-		return false;
-	}
-	CHLTVServer* hltv = CHLTVServer::FromBaseServer(base);
-	if (!hltv) {
-		ke::SafeStrcpy(error, maxlength, "Unresolved CHLTVServer base adjustment");
-		return false;
-	}
-	CHLTVDemoRecorder& recorder = hltv->m_DemoRecorder();
-	const auto track = [&](int& slot, int id, const char* name) {
-		if (m_HLTVHooks.Take<RemoveHook>(slot, id))
-			return true;
-		ke::SafeSprintf(error, maxlength, "Unable to hook %s", name);
-		m_HLTVHooks.Reset();
-		return false;
-	};
-
-	if (!track(CHLTVServer::shookid_ReplyChallenge, SH_ADD_MANUALHOOK(CBaseServer_ReplyChallenge,
-			base, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_ReplyChallenge), false), "HLTV ReplyChallenge") ||
+			return track(CHLTVServer::shookid_ReplyChallenge, SH_ADD_MANUALHOOK(CBaseServer_ReplyChallenge,
+					base, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_ReplyChallenge), false), "HLTV ReplyChallenge") &&
 #if SOURCE_ENGINE == SE_LEFT4DEAD2
-		!track(CHLTVServer::shookid_FillServerInfo, SH_ADD_MANUALHOOK(CBaseServer_FillServerInfo,
-			base, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_FillServerInfo), true), "HLTV CBaseServer::FillServerInfo") ||
+				track(CHLTVServer::shookid_FillServerInfo, SH_ADD_MANUALHOOK(CBaseServer_FillServerInfo,
+					base, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_FillServerInfo), true), "HLTV CBaseServer::FillServerInfo") &&
 #if !defined _WIN32
-		!track(CHLTVServer::shookid_hltv_FillServerInfo, SH_ADD_MANUALHOOK(CHLTVServer_FillServerInfo,
-			hltv, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_FillServerInfo), true), "CHLTVServer::FillServerInfo") ||
+				track(CHLTVServer::shookid_hltv_FillServerInfo, SH_ADD_MANUALHOOK(CHLTVServer_FillServerInfo,
+					hltv, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_FillServerInfo), true), "CHLTVServer::FillServerInfo") &&
 #endif
 #endif
-		!track(CHLTVServer::shookid_ConnectClient, SH_ADD_MANUALHOOK(CHLTVServer_ConnectClient,
-			base, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_ConnectClient), false), "HLTV ConnectClient") ||
-		!track(shookid_CHLTVDemoRecorder_RecordStringTables, SH_ADD_HOOK(CHLTVDemoRecorder, RecordStringTables,
-			&recorder, SH_MEMBER(this, &SMExtension::Handler_CHLTVDemoRecorder_RecordStringTables), false), "HLTV RecordStringTables") ||
-		!track(shookid_CHLTVDemoRecorder_RecordServerClasses, SH_ADD_HOOK(CHLTVDemoRecorder, RecordServerClasses,
-			&recorder, SH_MEMBER(this, &SMExtension::Handler_CHLTVDemoRecorder_RecordServerClasses), false), "HLTV RecordServerClasses") ||
-		!track(shookid_CServerGameEnts_CheckTransmit, SH_ADD_HOOK(IServerGameEnts, CheckTransmit,
-			gameents, SH_MEMBER(this, &SMExtension::Handler_CServerGameEnts_CheckTransmit), true), "CheckTransmit"))
-		return false;
+				track(CHLTVServer::shookid_ConnectClient, SH_ADD_MANUALHOOK(CHLTVServer_ConnectClient,
+					base, SH_MEMBER(this, &SMExtension::Handler_CHLTVServer_ConnectClient), false), "HLTV ConnectClient") &&
+				track(shookid_CHLTVDemoRecorder_RecordStringTables, SH_ADD_HOOK(CHLTVDemoRecorder, RecordStringTables,
+					&recorder, SH_MEMBER(this, &SMExtension::Handler_CHLTVDemoRecorder_RecordStringTables), false), "HLTV RecordStringTables") &&
+				track(shookid_CHLTVDemoRecorder_RecordServerClasses, SH_ADD_HOOK(CHLTVDemoRecorder, RecordServerClasses,
+					&recorder, SH_MEMBER(this, &SMExtension::Handler_CHLTVDemoRecorder_RecordServerClasses), false), "HLTV RecordServerClasses") &&
+				track(shookid_CServerGameEnts_CheckTransmit, SH_ADD_HOOK(IServerGameEnts, CheckTransmit,
+					gameents, SH_MEMBER(this, &SMExtension::Handler_CServerGameEnts_CheckTransmit), true), "CheckTransmit");
 
-	g_pHLTVServer = server;
-	return true;
+		});
 }
 
 void SMExtension::RepairHLTVServer(IHLTVServer* pIHLTVServer)
@@ -504,13 +502,13 @@ void SMExtension::RepairHLTVServer(IHLTVServer* pIHLTVServer)
 	// bug#1: stringTableCRC are not set in CHLTVServer::StartMaster
 	// client doesn't allow stringTableCRC to be empty
 	// CHLTVServer instance must copy property stringTableCRC from CGameServer instance
-	if (m_Phase == Phase::Active && g_pHLTVServer == pIHLTVServer)
+	if (m_Lifecycle.IsActive() && g_pHLTVServer == pIHLTVServer)
 		pServer->stringTableCRC() = CBaseServer::FromIServer(g_pGameIServer)->stringTableCRC();
 }
 
 void SMExtension::Handler_CHLTVDirector_SetHLTVServer(IHLTVServer* pIHLTVServer)
 {
-	if (m_Phase != Phase::Active)
+	if (!m_Lifecycle.IsActive())
 		RETURN_META(MRES_IGNORED);
 
 	if (!BindHLTVServer(pIHLTVServer, m_LifecycleError, sizeof(m_LifecycleError)))
@@ -637,16 +635,10 @@ bool SMExtension::SDK_OnLoad(char* error, size_t maxlength, bool late)
 	SH_MANUALHOOK_RECONFIGURE(CHLTVServer_ConnectClient, CBaseServer::vtblindex_ConnectClient->Index(), 0, 0);
 
 	// Retrieve addresses from steam_api shared library
-	if (!SetupFromSteamAPILibrary(error, maxlength)) {
+	if (!m_Lifecycle.Prepare([this] { Unload(); },
+		[&] { return SetupFromSteamAPILibrary(error, maxlength); },
+		[&] { return CreateDetours(error, maxlength); }))
 		return false;
-	}
-
-	if (!CreateDetours(error, maxlength)) {
-		Unload();
-		return false;
-	}
-
-	m_Phase = Phase::Prepared;
 	m_LifecycleError[0] = '\0';
 
 	sharesys->AddDependency(myself, "bintools.ext", true, true);

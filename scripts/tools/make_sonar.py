@@ -235,13 +235,16 @@ def run(action, default_database, root=ROOT):
     cppcheck = executable(env.get("SONAR_CPPCHECK") or "cppcheck", root)
     scanner = executable(env.get("SONAR_SCANNER") or "sonar-scanner", root) if context else None
     source_database = (root / (env.get("SONAR_COMPILE_COMMANDS") or default_database)).resolve()
-    coverage = []
-    if env.get("SONAR_COVERAGE_RECEIPT"):
+    def coverage_paths():
+        if not env.get("SONAR_COVERAGE_RECEIPT"):
+            return []
         from local_coverage import validate_receipt
         try:
-            coverage = validate_receipt(root, Path(env["SONAR_COVERAGE_RECEIPT"]), source_database)
-        except (OSError, ValueError, KeyError, ET.ParseError) as error:
+            return validate_receipt(root, Path(env["SONAR_COVERAGE_RECEIPT"]), source_database)
+        except (OSError, ValueError, KeyError, ET.ParseError, SonarError) as error:
             raise SonarError(f"Coverage receipt rejected: {error}") from None
+
+    coverage_paths()
     entries = compilation_database(root, source_database)
     local_env = {k: v for k, v in env.items() if not k.startswith("SONAR_")}
     entries, global_context = compiler_identity(entries, root, local_env)
@@ -262,6 +265,7 @@ def run(action, default_database, root=ROOT):
     print(f"[sonar] Informe Cppcheck: {report.relative_to(root)}", flush=True)
     if context is None:
         return
+    coverage = coverage_paths()
     base, project, name, wait, timeout = context
     # The token travels only in the scanner environment, never in argv/properties.
     result = subprocess.run([scanner, f"-Dsonar.host.url={base}", f"-Dsonar.projectKey={project}",

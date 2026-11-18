@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "runtime_resources.h"
+#include "runtime_lifecycle.h"
 #include "steam_runtime.h"
 
 #include <algorithm>
@@ -93,6 +94,122 @@ void TestPreparationAndProviderDrop()
 	}
 }
 
+void TestLifecycleOrchestration()
+{
+	constexpr int detours = 8;
+	constexpr int stages = 5;
+	for (int failAt = 0; failAt <= 2 * detours + stages; ++failAt) {
+		sourcetv::RuntimeLifecycle runtime;
+		std::array<int, detours> bindings{};
+		int created = 0;
+		int enabled = 0;
+		int attempts = 0;
+		int stops = 0;
+		std::vector<int> teardown;
+		providerAlive = true;
+		auto succeed = [&] { return attempts++ != failAt; };
+		auto stop = [&] {
+			runtime.Stop(
+				[&] {
+					assert(!runtime.IsActive());
+					while (enabled)
+						teardown.push_back(enabled--);
+				},
+				[&] {
+					assert(providerAlive);
+					assert(!enabled);
+					created = 0;
+					++stops;
+				});
+		};
+
+		bool prepared = runtime.Prepare(stop, [&] {
+			return sourcetv::ApplyRuntimeBindings(bindings, [&](int) {
+				if (!succeed())
+					return false;
+				++created;
+				return true;
+			});
+		});
+		assert(prepared == (failAt >= detours));
+		assert(runtime.IsPrepared() == prepared && !runtime.IsActive());
+		const bool started = runtime.Start(stop, succeed, succeed, succeed, succeed, succeed, [&] {
+			return sourcetv::ApplyRuntimeBindings(bindings, [&](int) {
+				assert(created == detours);
+				if (!succeed())
+					return false;
+				++enabled;
+				return true;
+			});
+		});
+
+		assert(started == (failAt == 2 * detours + stages));
+		assert(runtime.IsActive() == started);
+		assert(attempts == std::min(failAt + 1, 2 * detours + stages));
+		if (started) {
+			assert(stops == 0);
+			assert(runtime.CanDropSDKTools(true));
+			runtime.DropSDKTools(true, stop, [] {});
+			assert(runtime.IsActive());
+			runtime.DropBinTools(stop, [] { providerAlive = false; });
+			assert(!providerAlive);
+		}
+		assert(stops == 1 && !created && !enabled && !runtime.IsActive());
+		assert(!runtime.IsPrepared() && !runtime.CanDropSDKTools(true));
+		assert(std::is_sorted(teardown.rbegin(), teardown.rend()));
+	}
+
+	sourcetv::RuntimeLifecycle runtime;
+	int releases = 0;
+	assert(runtime.Prepare([] {}, [] { return true; }));
+	runtime.DropSDKTools(false, [&] { runtime.Stop([&] { ++releases; }); }, [] {});
+	assert(releases == 1 && !runtime.IsPrepared());
+}
+
+void TestRuntimeRebinding()
+{
+	constexpr int count = 7;
+	for (int failAt = 0; failAt < count; ++failAt) {
+		sourcetv::RuntimeResources<count> hooks;
+		std::array<int, count> ids{};
+		int previous = 1, replacement = 2;
+		int* current = nullptr;
+		const auto release = [&] {
+			assert(!current);
+			hooks.Reset();
+		};
+		releasedHooks.clear();
+		assert(sourcetv::BindRuntimeServer(current, &previous, release, [&](int* server) {
+			assert(!current && server == &previous);
+			return hooks.Take<RemoveHook>(ids[0], 100);
+		}));
+		assert(current == &previous);
+		assert(!sourcetv::BindRuntimeServer(current, &replacement, release, [&](int* server) {
+			assert(!current && server == &replacement);
+			assert(releasedHooks == std::vector<int>{100});
+			for (int i = 0; i < count; ++i) {
+				if (!hooks.Take<RemoveHook>(ids[i], i == failAt ? 0 : i + 1))
+					return false;
+			}
+			return true;
+		}));
+		assert(!current && (ids == std::array<int, count>{}));
+		assert(releasedHooks.size() == static_cast<size_t>(1 + failAt));
+		for (int i = 0; i < failAt; ++i)
+			assert(releasedHooks[i + 1] == failAt - i);
+
+		assert(sourcetv::BindRuntimeServer(current, &replacement, release, [&](int*) {
+			return hooks.Take<RemoveHook>(ids[0], 200);
+		}));
+		assert(current == &replacement);
+		for (int i = 0; i < 2; ++i)
+			assert(sourcetv::BindRuntimeServer(current, static_cast<int*>(nullptr), release,
+				[](int*) { return false; }));
+		assert(!current && releasedHooks.back() == 200);
+		assert(releasedHooks.size() == static_cast<size_t>(2 + failAt));
+	}
+}
+
 void TestSteamInitAndRestart()
 {
 	constexpr uint16_t sharedPort = 0xffff;
@@ -147,5 +264,7 @@ int main()
 	TestPartialHookAcquisitions();
 	TestPreparationAndProviderDrop();
 	TestSteamInitAndRestart();
+	TestLifecycleOrchestration();
+	TestRuntimeRebinding();
 	std::puts("runtime_lifecycle: passed");
 }

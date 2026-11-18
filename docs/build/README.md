@@ -57,7 +57,12 @@ La prueba Python incluye los subprocesos de las pruebas de paquete.
 
 Para adjuntar las mediciones al análisis explícito, configura
 `SONAR_COVERAGE_RECEIPT` con la ruta de `receipt.json`. El backend comprueba
-las huellas de fuentes, base de compilación e informes antes del análisis.
+las huellas de fuentes, pruebas, headers transitivos, submódulos, órdenes
+efectivas, toolchain e informes antes de procesar el recibo y antes de lanzar
+el scanner. Usa `NATIVE_CXXFLAGS` para seleccionar flags de las pruebas
+nativas. La cobertura añade sus propios flags a ese perfil. Si usas un GCC
+distinto, indica el gcov correspondiente mediante `GCOV`.
+`make test-coverage-tooling` verifica el recibo y la importación simulada.
 El análisis y la cobertura quedan fuera de CI y del ZIP.
 
 ## Sonar local
