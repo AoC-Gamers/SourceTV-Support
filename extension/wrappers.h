@@ -219,12 +219,6 @@ public:
 	}
 };
 
-class CGameServer
-{
-public:
-	static int shookid_IsPausable;
-};
-
 class CSteam3Server
 {
 public:

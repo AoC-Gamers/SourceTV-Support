@@ -45,7 +45,6 @@ int CHLTVServer::shookid_hltv_FillServerInfo = 0;
 int CHLTVServer::shookid_ConnectClient = 0;
 void* CHLTVServer::pfn_AddNewFrame = NULL;
 CDetour* CHLTVServer::detour_AddNewFrame = NULL;
-int CGameServer::shookid_IsPausable = 0;
 int CBaseClient::offset_m_SteamID = 0;
 void* CBaseClient::pfn_SendFullConnectEvent = NULL;
 CDetour* CBaseClient::detour_SendFullConnectEvent = NULL;
@@ -82,7 +81,6 @@ SH_DECL_HOOK1_void(CHLTVDemoRecorder, RecordServerClasses, SH_NOATTRIB, 0, Serve
 SH_DECL_MANUALHOOK2_void(CBaseServer_ReplyChallenge, 0, 0, 0, netadr_s&, bf_read&);
 SH_DECL_MANUALHOOK1_void(CBaseServer_FillServerInfo, 0, 0, 0, SVC_ServerInfo&);
 SH_DECL_MANUALHOOK1_void(CHLTVServer_FillServerInfo, 0, 0, 0, SVC_ServerInfo&);
-SH_DECL_HOOK0(IServer, IsPausable, const, 0, bool);
 #if SOURCE_ENGINE == SE_LEFT4DEAD2
 SH_DECL_HOOK0_void(ISteamGameServer, LogOff, SH_NOATTRIB, 0);
 #endif
@@ -325,9 +323,6 @@ void SMExtension::Load()
 	CBaseClient::detour_SendFullConnectEvent->EnableDetour();
 #endif
 
-#if SOURCE_ENGINE == SE_LEFT4DEAD
-	CGameServer::shookid_IsPausable = SH_ADD_HOOK(IServer, IsPausable, g_pGameIServer, SH_MEMBER(this, &SMExtension::Handler_CGameServer_IsPausable), true);
-#endif
 	SH_ADD_HOOK(IHLTVDirector, SetHLTVServer, hltvdirector, SH_MEMBER(this, &SMExtension::Handler_CHLTVDirector_SetHLTVServer), true);
 
 	OnSetHLTVServer(hltvdirector->GetHLTVServer());
@@ -398,9 +393,6 @@ void SMExtension::Unload()
 
 	SH_REMOVE_HOOK(IHLTVDirector, SetHLTVServer, hltvdirector, SH_MEMBER(this, &SMExtension::Handler_CHLTVDirector_SetHLTVServer), true);
 	OnSetHLTVServer(NULL);
-
-	SH_REMOVE_HOOK_ID(CGameServer::shookid_IsPausable);
-	CGameServer::shookid_IsPausable = 0;
 }
 
 bool SMExtension::SetupFromGameConfig(IGameConfig* gc, char* error, int maxlength)
@@ -833,12 +825,6 @@ void SMExtension::Handler_ISteamGameServer_LogOff()
 	}
 
 	RETURN_META(MRES_IGNORED);
-}
-
-bool SMExtension::Handler_CGameServer_IsPausable() const
-{
-	static ConVarRef sv_pausable("sv_pausable");
-	RETURN_META_VALUE(MRES_SUPERCEDE, sv_pausable.GetBool());
 }
 
 void SMExtension::Handler_CHLTVServer_FillServerInfo(SVC_ServerInfo& serverinfo)

@@ -102,7 +102,7 @@ class ExtensionConfig(object):
     return ResolveEnvPath('HL2SDK{}'.format(sdk_name.upper()), dir_name)
 
   def shouldIncludeSdk(self, sdk):
-    return not sdk.get('source2', False)
+    return sdk['name'] == 'l4d2'
 
   def detectSDKs(self):
     sdk_list = [s for s in builder.options.sdks.split(',') if s]

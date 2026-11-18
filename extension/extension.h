@@ -77,7 +77,6 @@ public: // SourceHook callbacks
 	void Handler_CHLTVDemoRecorder_RecordServerClasses(ServerClass* pClasses);
 	void Handler_CHLTVServer_ReplyChallenge(netadr_s& adr, bf_read& inmsg);
 	void Handler_ISteamGameServer_LogOff();
-	bool Handler_CGameServer_IsPausable() const;
 	void Handler_CHLTVServer_FillServerInfo(SVC_ServerInfo& serverinfo);
 	void Handler_CServerGameEnts_CheckTransmit(CCheckTransmitInfo* pInfo, const unsigned short* pEdictIndices, int nEdicts);
 	IClient* Handler_CHLTVServer_ConnectClient(netadr_t& adr, int protocol, int challenge, int authProtocol, const char* name,

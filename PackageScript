@@ -29,22 +29,21 @@ def CopyFiles(src, dest, files):
     builder.AddCopy(source_path, dest_entry)
 
 # VDF loader
-CopyFiles('extra', 'addons',
+CopyFiles('addons', 'addons',
   [
-    'sourcetvsupport_vsp_l4d.vdf',
     'sourcetvsupport_vsp_l4d2.vdf',
   ]
 )
 
 # Gamedata file
-CopyFiles('extra', 'addons/sourcemod/gamedata',
+CopyFiles('addons/sourcemod/gamedata', 'addons/sourcemod/gamedata',
   [
     'sourcetvsupport.txt',
   ]
 )
 
 # Autoload file
-CopyFiles('extra', 'addons/sourcemod/extensions',
+CopyFiles('addons/sourcemod/extensions', 'addons/sourcemod/extensions',
   [
     'sourcetvsupport.autoload',
   ]

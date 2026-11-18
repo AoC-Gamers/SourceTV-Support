@@ -1,1 +1,18 @@
 build/
+
+/.env.secret
+__pycache__/
+/.deps/
+/.build/
+/dist/
+/.env
+/safetyhook/
+
+!/docs/build/
+!/scripts/build/
+/.env.*
+!/.env.example
+!/.env.secret.example
+
+# Steamworks SDK de compilación, preparado localmente.
+/sdk_*/

@@ -1,29 +1,24 @@
-![Build Status](https://github.com/shqke/sourcetvsupport/workflows/CI/badge.svg?branch=master)
-![License](https://img.shields.io/github/license/shqke/sourcetvsupport)
-![Release](https://img.shields.io/github/v/release/shqke/sourcetvsupport)
+# SourceTV-Support
 
 Introduction
 ------
-SourceMod extension that fixes broken broadcasting/demo recording features in L4D series.
+SourceMod extension that fixes broken broadcasting/demo recording features in Left 4 Dead 2.
 
 More information about SourceTV on wiki: https://developer.valvesoftware.com/wiki/SourceTV
 
 Requirements
 ------
-- [MM:Source (1.10+)](https://www.sourcemm.net/)
-- [SourceMod (1.8+)](https://www.sourcemod.net/)
+- [SourceMod](https://www.sourcemod.net/) y Metamod:Source 1.12 para la matriz de build AoC. El README heredado declaraba SourceMod 1.8+; la carga con versiones anteriores a 1.12 queda pendiente de validar.
 
 Supported Games
 ------
-- [Left 4 Dead](https://store.steampowered.com/app/500/Left_4_Dead/)
 - [Left 4 Dead 2](https://store.steampowered.com/app/550/Left_4_Dead_2/)
 
-Installation
+Installation and building
 ------
-1. Get [latest sourcetvsupport release](https://github.com/shqke/sourcetvsupport/actions) (requires authentication) for your OS (linux or windows)
-2. Extract the zip file into your server's mod folder
-3. Add `-hltv` and/or `+tv_enable 1` to srcds start parameters
-4. Set SourceTV related cvars into server config
+Use the [installation guide](docs/installation/README.md) and the
+[build guide](docs/build/README.md). CI ZIPs are available from the
+[AoC Actions runs](https://github.com/AoC-Gamers/SourceTV-Support/actions).
 
 Also Recommended
 ------
@@ -52,7 +47,6 @@ Fixed Issues
 - (L4D2) Event `player_full_connect` was sent for HLTV clients userids
 - (L4D2) **ISteamGameServer** interface would log off whenever **CHLTVServer** was shutting down
 - SourceTV bot was never moved into Spectator team
-- (L4D) Server is now always respects value of cvar `sv_pausable`
 - SourceTV bot doesn't take a human slot and doesn't count as a potential voter
 - "CUtlRBTree overflow" on level transition
 - Broken demos on early recording (tv_autorecord)

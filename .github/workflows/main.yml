@@ -1,142 +1,151 @@
-name: CI
+# SPDX-License-Identifier: GPL-3.0-only
+name: CI AoC
 
 on:
   push:
-    paths-ignore:
-    - LICENSE
-    - README.md
+    branches: [develop, main, master]
+    tags: ['v*']
   pull_request:
-    paths-ignore:
-    - LICENSE
-    - README.md
+    branches: [develop, main, master]
   workflow_dispatch:
-  schedule:
-    - cron: '30 03 01 */3 *' # Artifacts expire every 3 months
+    inputs:
+      publish_release:
+        description: Publicar ambos ZIP en GitHub Releases
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
 
 jobs:
+  identity:
+    runs-on: ubuntu-22.04
+    outputs:
+      channel: ${{ steps.release.outputs.channel }}
+    steps:
+      - name: Determinar canal o versión
+        id: release
+        shell: bash
+        run: |
+          case "$GITHUB_EVENT_NAME:$GITHUB_REF_TYPE:$GITHUB_REF_NAME" in
+            pull_request:*) channel="${GITHUB_SHA:0:12}" ;;
+            *:branch:main|*:branch:master) channel=latest ;;
+            *:branch:develop) channel=develop ;;
+            *:tag:v[0-9]*) channel="${GITHUB_REF_NAME#v}" ;;
+            *:tag:*) echo "El tag debe comenzar con v y un número." >&2; exit 1 ;;
+            *) channel="${GITHUB_SHA:0:12}" ;;
+          esac
+          if [[ ! "$channel" =~ ^(develop|latest|[0-9a-f]{7,12}|[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?)$ ]]; then
+            echo "Nombre de versión inválido" >&2
+            exit 1
+          fi
+          printf 'channel=%s\n' "$channel" >>"$GITHUB_OUTPUT"
+
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: make test-ci PYTHON=python
+
   build:
-    name: build with sm${{ matrix.sm_version }} on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    if: github.event_name != 'pull_request'
+    needs: [test, identity]
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - ubuntu-22.04
-          - windows-latest
-          
-        sm_version:
-          - "1.12"
-          - "latest"
-          
         include:
-          - meta_version: "1.12"
-            meta_branch: "1.12-dev"
-            
-          - os_short: linux
-            
-          - sm_version: "1.12"
-            sm_branch: "1.12-dev"
-            
-          - sm_version: "latest"
-            sm_branch: "master"
-            
-          - os: ubuntu-22.04
-            os_short: oldlinux
-            
-          - os: windows-latest
-            os_short: win
-            
+          - platform: linux
+            runner: ubuntu-22.04
+          - platform: windows
+            runner: windows-2022
     steps:
-      - name: Prepare env
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Comprobar la credencial del SDK
         shell: bash
+        env:
+          SDK_TOKEN: ${{ secrets.STEAMWORKS_SDK_TOKEN }}
         run: |
-          echo "GITHUB_SHA_SHORT=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          
-      - name: Install (Linux)
-        if: runner.os == 'Linux'
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install -y clang g++-multilib
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "CXX=clang++" >> $GITHUB_ENV
-          
-      - name: Getting SourceMod ${{ matrix.sm_version }}
-        uses: actions/checkout@v7
-        with:
-          repository: alliedmodders/sourcemod
-          ref: ${{ matrix.sm_branch }}
-          path: sourcemod-${{ matrix.sm_version }}
-          submodules: recursive
-          
-      - name: Getting MM:Source ${{ matrix.meta_version }}
-        uses: actions/checkout@v7
-        with:
-          repository: alliedmodders/metamod-source
-          ref: ${{ matrix.meta_branch }}
-          path: metamod-${{ matrix.meta_version }}
-          
-      - name: Getting SteamWorks SDK
-        uses: actions/checkout@v7
-        with:
-          repository: shqke/steamworks-sdk
-          ref: v1.55
-          path: steamworks-sdk
-          token: ${{ secrets.STEAMWORKS_REPO_ACCESS_TOKEN }}
-          
-      - name: Setting up Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: 3.12
-        
-      - name: Getting ambuild
-        run: |
-          python -m pip install wheel
-          pip install git+https://github.com/alliedmodders/ambuild
-          
-      - name: Getting hl2sdk-l4d2
-        uses: actions/checkout@v7
-        with:
-          repository: alliedmodders/hl2sdk
-          ref: l4d2
-          path: hl2sdk-l4d2
-          
-      - name: Getting hl2sdk-l4d
+          if [[ -z "$SDK_TOKEN" || "$SDK_TOKEN" == PENDIENTE_CONFIGURAR ]]; then
+            echo "Configura el secreto STEAMWORKS_SDK_TOKEN con acceso de lectura al SDK de AoC." >&2
+            exit 1
+          fi
+      - name: Obtener Steamworks SDK 1.55 de AoC
         uses: actions/checkout@v6
         with:
-          repository: alliedmodders/hl2sdk
-          ref: l4d
-          path: hl2sdk-l4d
-          
-      - name: Checking out hl2sdk-manifests
-        uses: actions/checkout@v7
-        with:
-          repository: alliedmodders/hl2sdk-manifests
-          path: hl2sdk-manifests
-          
-      - name: Getting own repository
-        uses: actions/checkout@v7
-        with:
-          path: src
-          
-      - name: Compiling ${{ github.event.repository.name }} files
-        shell: bash
-        working-directory: src
+          repository: AoC-Gamers/Steamworks-SDK
+          ref: a7aaa2754d9cda244d0cd9d7523c1144a1c472d2
+          path: .deps/steamworks-sdk
+          token: ${{ secrets.STEAMWORKS_SDK_TOKEN }}
+          persist-credentials: false
+      - name: Preparar toolchain Linux x86
+        if: runner.os == 'Linux'
         run: |
-          mkdir build
-          cd build
-          python \
-            ../configure.py \
-            --enable-optimize \
-            --sm-path="${{ github.workspace }}/sourcemod-${{ matrix.sm_version }}"\
-            --hl2sdk-manifest-path="${{ github.workspace }}/hl2sdk-manifests"\
-            --mms-path="${{ github.workspace }}/metamod-${{ matrix.meta_version }}"\
-            --swsdk-path="${{ github.workspace }}/steamworks-sdk"
-          ambuild
-          
-      - name: Uploading package
+          sudo apt-get update
+          sudo apt-get install -y make g++-multilib
+      - name: Preparar GNU Make en Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          if (-not (Get-Command make -ErrorAction SilentlyContinue)) {
+            choco install make --no-progress -y
+            exit $LASTEXITCODE
+          }
+      - name: Preparar dependencias, compilar y verificar ZIP
+        shell: bash
+        env:
+          PLATFORM: ${{ matrix.platform }}
+          STEAMWORKS_SDK_DIR: ${{ github.workspace }}/.deps/steamworks-sdk/sdk_155
+          RELEASE_CHANNEL: ${{ needs.identity.outputs.channel }}
+        run: |
+          make "deps-exts-$PLATFORM" PYTHON=python
+          make "build-exts-$PLATFORM" PYTHON=python
+          make "package-exts-$PLATFORM" PYTHON=python
+          make "release-$PLATFORM" PYTHON=python
+          make "validate-artifact-$PLATFORM" PYTHON=python
+      - name: Guardar ZIP verificado
         uses: actions/upload-artifact@v7
         with:
-          name: sourcetvsupport-sm${{ matrix.sm_version }}-${{ matrix.os_short }}-${{ env.GITHUB_SHA_SHORT }}
-          path: src/build/package
+          path: dist/release/*.zip
+          if-no-files-found: error
+          archive: false
+          overwrite: true
+
+  publish:
+    needs: [identity, build]
+    if: >-
+      github.event_name == 'workflow_dispatch' && inputs.publish_release &&
+      (github.ref_name == 'develop' || github.ref_name == 'master' || github.ref_name == 'main' ||
+      (github.ref_type == 'tag' && startsWith(github.ref_name, 'v')))
+    runs-on: ubuntu-22.04
+    concurrency:
+      group: publish-sourcetv
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: sourcetvsupport-${{ needs.identity.outputs.channel }}-*.zip
+          merge-multiple: true
+          path: dist/release
+      - name: Publicar los dos ZIP validados
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STEAMWORKS_SDK_DIR: ${{ github.workspace }}/.deps/steamworks-sdk/sdk_155
+          RELEASE_CHANNEL: ${{ needs.identity.outputs.channel }}
+        run: bash scripts/ci/publish-release.sh sourcetvsupport "$RELEASE_CHANNEL"

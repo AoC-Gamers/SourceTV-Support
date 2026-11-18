@@ -1,0 +1,26 @@
+{
+  "name": "sourcetvsupport",
+  "build": {
+    "sdks": [
+      "l4d2"
+    ],
+    "arch": "x86"
+  },
+  "artifact": {
+    "binaries": [
+      "addons/sourcemod/extensions/sourcetvsupport.ext.2.l4d2",
+      "addons/sourcetvsupport/bin/vsp_l4d2"
+    ],
+    "resources": [
+      "addons/sourcemod/extensions/sourcetvsupport.autoload",
+      "addons/sourcemod/gamedata/sourcetvsupport.txt",
+      "addons/sourcetvsupport_vsp_l4d2.vdf"
+    ],
+    "documentation": {
+      "LICENSE": "LICENSE",
+      "NOTICE.md": "NOTICE.md",
+      "README.md": "docs/installation/README.md",
+      "CHANGELOG.md": "CHANGELOG.md"
+    }
+  }
+}
