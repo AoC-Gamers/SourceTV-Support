@@ -34,4 +34,6 @@
 
 ### Desarrollo
 
+- Cada push a `develop` publica la prerelease con los ZIP validados de Linux y Windows.
+
 - GNU Make centraliza la preparación de dependencias, la compilación, las pruebas y el empaquetado local y en CI.
