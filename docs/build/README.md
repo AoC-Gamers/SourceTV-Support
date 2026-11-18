@@ -22,10 +22,10 @@ El staging queda en `dist/<plataforma>/artifact/` y el ZIP en `dist/release/`.
 
 ## CI
 
-El job de build Linux usa la variable de organización `L4D2_EXT_LINUX_RUNNER`.
-AoC la configura en `ubuntu-26.04` y la habilita para este repositorio.
-Si queda vacía o el repositorio pierde acceso a la variable, la validación
-previa falla con un mensaje antes de asignar el runner de compilación.
+La matriz de build toma los runners de las variables de organización
+`L4D2_EXT_LINUX_RUNNER` y `L4D2_EXT_WINDOWS_RUNNER`. Si alguna variable
+requerida falta, está vacía o solo contiene espacios, la validación
+previa falla con un mensaje antes de asignar los runners de compilación.
 
 GitHub Actions ejecuta las pruebas del contrato y compila en Linux y Windows.
 El recibo de compilación vincula las fuentes, las dependencias efectivas y

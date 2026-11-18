@@ -23,9 +23,11 @@ jobs:
     outputs:
       channel: ${{ steps.release.outputs.channel }}
       linux_runner: ${{ steps.runner.outputs.label }}
+      windows_runner: ${{ steps.windows-runner.outputs.label }}
     steps:
       - name: Validar el runner Linux de L4D2
         id: runner
+        if: github.event_name != 'pull_request'
         shell: bash
         env:
           L4D2_EXT_LINUX_RUNNER: ${{ vars.L4D2_EXT_LINUX_RUNNER }}
@@ -35,6 +37,18 @@ jobs:
             exit 1
           fi
           printf 'label=%s\n' "$L4D2_EXT_LINUX_RUNNER" >>"$GITHUB_OUTPUT"
+      - name: Validar el runner Windows de L4D2
+        id: windows-runner
+        if: github.event_name != 'pull_request'
+        shell: bash
+        env:
+          L4D2_EXT_WINDOWS_RUNNER: ${{ vars.L4D2_EXT_WINDOWS_RUNNER }}
+        run: |
+          if [[ -z "${L4D2_EXT_WINDOWS_RUNNER//[[:space:]]/}" ]]; then
+            echo "::error::Falta L4D2_EXT_WINDOWS_RUNNER. Configúrala en AoC-Gamers y habilítala para este repositorio."
+            exit 1
+          fi
+          printf 'label=%s\n' "$L4D2_EXT_WINDOWS_RUNNER" >>"$GITHUB_OUTPUT"
       - name: Determinar canal o versión
         id: release
         shell: bash
@@ -75,7 +89,7 @@ jobs:
           - platform: linux
             runner: ${{ needs.identity.outputs.linux_runner }}
           - platform: windows
-            runner: windows-2022
+            runner: ${{ needs.identity.outputs.windows_runner }}
     steps:
       - uses: actions/checkout@v6
         with:
