@@ -22,6 +22,11 @@ El staging queda en `dist/<plataforma>/artifact/` y el ZIP en `dist/release/`.
 
 ## CI
 
+El job de build Linux usa la variable de organización `L4D2_EXT_LINUX_RUNNER`.
+AoC la configura en `ubuntu-26.04` y la habilita para este repositorio.
+Si queda vacía o el repositorio pierde acceso a la variable, la validación
+previa falla con un mensaje antes de asignar el runner de compilación.
+
 GitHub Actions ejecuta las pruebas del contrato y compila en Linux y Windows.
 El recibo de compilación vincula los binarios a sus SHA-256. El ZIP identifica la revisión o las fuentes locales usadas.
 Los ZIP de runs de `develop` usan el canal Develop. Los runs de `master` o

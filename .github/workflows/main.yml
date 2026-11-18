@@ -22,7 +22,19 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       channel: ${{ steps.release.outputs.channel }}
+      linux_runner: ${{ steps.runner.outputs.label }}
     steps:
+      - name: Validar el runner Linux de L4D2
+        id: runner
+        shell: bash
+        env:
+          L4D2_EXT_LINUX_RUNNER: ${{ vars.L4D2_EXT_LINUX_RUNNER }}
+        run: |
+          if [[ -z "${L4D2_EXT_LINUX_RUNNER//[[:space:]]/}" ]]; then
+            echo "::error::Falta L4D2_EXT_LINUX_RUNNER. Configúrala en AoC-Gamers y habilítala para este repositorio."
+            exit 1
+          fi
+          printf 'label=%s\n' "$L4D2_EXT_LINUX_RUNNER" >>"$GITHUB_OUTPUT"
       - name: Determinar canal o versión
         id: release
         shell: bash
@@ -61,7 +73,7 @@ jobs:
       matrix:
         include:
           - platform: linux
-            runner: ubuntu-22.04
+            runner: ${{ needs.identity.outputs.linux_runner }}
           - platform: windows
             runner: windows-2022
     steps:
