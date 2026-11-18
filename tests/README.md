@@ -1,6 +1,8 @@
 # Pruebas de SourceTV-Support
 
-`make test-ci` ejecuta las pruebas del contrato de empaquetado.
+`make test-ci` comprueba procedencia de dependencias, esquema y contenido
+del paquete, y el rechazo de entradas inválidas antes de publicar. Usa checkouts
+temporales y dobles del publicador, sin descargas ni Sonar.
 
 En instalaciones de prueba de L4D2 x86, instala el ZIP de la plataforma y
 conserva el VDF del juego. Arranca SRCDS con `-hltv +tv_enable 1`. Comprueba la

@@ -4,7 +4,9 @@
 
 ### Cambiado
 
-- **Distribución.** ZIP Linux y Windows para L4D2 x86 con la extensión, el VSP y los recursos de carga. Los ZIP se verifican contra los binarios exactos de la compilación.
+- **Distribución.** ZIP Linux y Windows para L4D2 x86 con la extensión, el VSP y
+  los recursos de carga. El ZIP incluye el README del proyecto y se verifica
+  contra los binarios y dependencias de la compilación.
 
 ### Eliminado
 

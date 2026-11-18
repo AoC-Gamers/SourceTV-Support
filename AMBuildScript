@@ -1,5 +1,5 @@
 # vim: set sts=2 ts=8 sw=2 tw=99 et ft=python:
-import os, sys, shutil
+import os, sys
 
 def ResolveEnvPath(env, folder):
   if env in os.environ:
@@ -422,7 +422,7 @@ class ExtensionConfig(object):
     
     if os.path.exists(os.path.join(sm_public_path, 'safetyhook')):
       binary.sources += [ os.path.join(sm_public_path, 'CDetour', 'detours.cpp') ]
-      binary.compiler.cxxincludes += [ os.path.join(builder.sourcePath, 'safetyhook', 'include') ]
+      binary.compiler.cxxincludes += [ os.path.join(sm_public_path, 'safetyhook', 'include') ]
 
       for task in self.libsafetyhook:
         if task.target.arch == binary.compiler.target.arch:
@@ -481,13 +481,21 @@ Extension.detectSDKs()
 Extension.configure()
 
 if os.path.exists(os.path.join(Extension.sm_root, 'public', 'safetyhook')):
-    # we need to pull safetyhook in locally because ambuild does not take kindly to outside relpaths
-    safetyhook_dest = Normalize(builder.sourcePath + '/safetyhook/')
-    shutil.copytree(os.path.join(Extension.sm_root, 'public', 'safetyhook'), safetyhook_dest, dirs_exist_ok=True)
+    safetyhook_source = os.path.join(Extension.sm_root, 'public', 'safetyhook')
+    safetyhook_script = os.path.join(safetyhook_source, 'AMBuilder')
+    builder.AddConfigureFile(safetyhook_script)
 
     SafetyHook = SafetyHookShim()
     SafetyHook.all_targets = Extension.all_targets
-    builder.Build('safetyhook/AMBuilder', {'SafetyHook': SafetyHook })
+
+    def build_safetyhook(context):
+      # Keep the build context inside the project and read inputs directly from SourceMod.
+      context.currentSourcePath = safetyhook_source
+      with open(safetyhook_script, 'rb') as source:
+        code = compile(source.read(), safetyhook_script, 'exec')
+      exec(code, {'builder': context, 'SafetyHook': SafetyHook, '__file__': safetyhook_script})
+
+    builder.CallBuilder(build_safetyhook)
     Extension.libsafetyhook = SafetyHook.libsafetyhook
 
 # This will clone the list and each cxx object as we recurse, preventing child

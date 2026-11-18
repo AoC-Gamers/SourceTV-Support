@@ -6,8 +6,12 @@ slug="$1"
 channel="$2"
 linux_asset="dist/release/$slug-$channel-linux.zip"
 windows_asset="dist/release/$slug-$channel-windows.zip"
-test -s "$linux_asset"
-test -s "$windows_asset"
+for asset in "$linux_asset" "$windows_asset"; do
+    if [[ ! -f "$asset" || ! -s "$asset" ]]; then
+        printf 'No se puede publicar: falta el ZIP o está vacío: %s\n' "$asset" >&2
+        exit 1
+    fi
+done
 test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
 python3 - "$GITHUB_SHA" "$channel" "$linux_asset" "$windows_asset" <<'PYZIP'
 import sys

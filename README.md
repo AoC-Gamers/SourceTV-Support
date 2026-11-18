@@ -14,11 +14,28 @@ Supported Games
 ------
 - [Left 4 Dead 2](https://store.steampowered.com/app/550/Left_4_Dead_2/)
 
-Installation and building
+Instalación y compilación
 ------
-Use the [installation guide](docs/installation/README.md) and the
-[build guide](docs/build/README.md). CI ZIPs are available from the
-[AoC Actions runs](https://github.com/AoC-Gamers/SourceTV-Support/actions).
+El paquete contiene la extensión de SourceMod, el VSP y los recursos de carga
+para Left 4 Dead 2 x86. Copia el árbol `addons/` del ZIP de la plataforma a
+`left4dead2/`.
+
+1. Instala Metamod:Source y SourceMod.
+2. Conserva `addons/sourcetvsupport_vsp_l4d2.vdf` para cargar el VSP.
+3. Usa `-hltv` para habilitar transmisiones y `+tv_enable 1` para habilitar
+   SourceTV desde el primer mapa. Configura `tv_port` si necesitas otro puerto.
+4. Confirma la carga de la extensión con `sm exts list` y del VSP con
+   `plugin_print` en la consola del servidor.
+
+Consulta la [guía de compilación](docs/build/README.md). Los ZIP están en
+[Releases](https://github.com/AoC-Gamers/SourceTV-Support/releases).
+
+### Actualización y reversión
+
+Detén SRCDS y guarda los binarios y recursos SourceTV de la instalación actual.
+Copia el árbol `addons/` del ZIP nuevo al directorio del juego y repite la
+comprobación de carga. Para revertir, detén el servidor, restaura esos archivos desde la copia y
+retira los archivos añadidos por la actualización antes de volver a iniciar SRCDS.
 
 Also Recommended
 ------

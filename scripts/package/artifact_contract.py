@@ -16,11 +16,28 @@ import subprocess
 import sys
 import tempfile
 import zipfile
+from urllib.parse import quote
 
 
 ROOT = Path(__file__).resolve().parents[2]
-MAP = json.loads(Path(__file__).with_name("package-map.json").read_text())
+sys.path.insert(0, str(ROOT / "scripts/deps"))
+from provenance import add_input_arguments, dependency_identities
 
+REPOSITORY = "https://github.com/AoC-Gamers/SourceTV-Support"
+
+
+def unique_map_keys(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"Mapa: clave duplicada: {key}.")
+        result[key] = value
+    return result
+
+
+def load_map():
+    path = Path(__file__).with_name("package-map.json")
+    return json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_map_keys)
 
 def validate_binary(blob, platform):
     if platform == "linux":
@@ -42,6 +59,7 @@ def source_digest():
     paths = [ROOT / name for name in (
         "AMBuildScript", "configure.py", "PackageScript",
         "scripts/build/build-native.py", "scripts/deps/build-deps.lock",
+        "scripts/deps/provenance.py",
         "scripts/package/package-map.json",
     )]
     paths.extend((ROOT / "scripts/build").glob("*.lock.json"))
@@ -61,19 +79,66 @@ def check_paths(paths):
         parts = PurePosixPath(name).parts
         if (not parts or name != "/".join(parts) or name.startswith("/")
                 or any(part in {".", ".."} for part in parts)
+                or any(ord(character) < 32 for character in name)
+                or any(part.endswith((".", " ")) for part in parts)
+                or any(re.fullmatch(r"(?:con|prn|aux|nul|com[1-9]|lpt[1-9])",
+                                    part.partition(".")[0], re.IGNORECASE) for part in parts)
                 or any(character in name for character in '\\:<>"|?*')):
             raise ValueError(f"Ruta no válida en el mapa: {name}")
         key = name.casefold()
         if key in seen:
             raise ValueError(f"Ruta repetida en el mapa: {name}")
         seen.add(key)
+    for name in seen:
+        if any(parent.as_posix() in seen for parent in PurePosixPath(name).parents):
+            raise ValueError(f"El mapa usa un archivo como directorio: {name}")
 
 
-def binary_paths(platform):
+def require_keys(value, expected, section):
+    if not isinstance(value, dict):
+        raise ValueError(f"Mapa: {section} debe ser un objeto.")
+    if value.keys() != expected:
+        raise ValueError(f"Mapa: claves inesperadas en {section}: {sorted(value.keys() - expected)}. "
+                         f"Claves requeridas ausentes: {sorted(expected - value.keys())}.")
+
+
+def validate_map(mapping, root=ROOT):
+    require_keys(mapping, {"name", "build", "artifact"}, "raíz")
+    slug = mapping["name"]
+    if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+        raise ValueError("Mapa: identificador de producto no válido.")
+    build = mapping["build"]
+    require_keys(build, {"arch", "sdks"}, "build")
+    if build["arch"] != "x86" or build["sdks"] != ["l4d2"]:
+        raise ValueError("Mapa: se requiere L4D2 x86.")
+    artifact = mapping["artifact"]
+    require_keys(artifact, {"binaries", "resources", "documentation"}, "artifact")
+    binaries, resources, docs = (artifact[key] for key in ("binaries", "resources", "documentation"))
+    for value in (binaries, resources):
+        if not isinstance(value, list) or any(not isinstance(entry, str) for entry in value):
+            raise ValueError("Mapa: binaries y resources requieren listas de rutas.")
+    require_keys(docs, {"LICENSE", "NOTICE.md", "README.md", "CHANGELOG.md"}, "documentation")
+    if any(not isinstance(source, str) for source in docs.values()):
+        raise ValueError("Mapa: las fuentes de documentation deben ser rutas.")
+    if docs["README.md"] != "README.md":
+        raise ValueError("Mapa: el README del paquete debe venir de README.md raíz.")
+    check_paths(docs.values())
+    for suffix in (".so", ".dll"):
+        check_paths([*(stem + suffix for stem in binaries), *resources, *docs])
+    required_resources = {".vdf", ".txt", ".autoload"}
+    required_binaries = {f"addons/sourcemod/extensions/{slug}.ext.2.l4d2", f"addons/{slug}/bin/vsp_l4d2"}
+    if (set(binaries) != required_binaries or len(resources) != len(required_resources)
+            or {PurePosixPath(path).suffix for path in resources} != required_resources):
+        raise ValueError("Mapa: faltan binarios o recursos obligatorios.")
+    if any(not path.startswith("addons/") for path in (*binaries, *resources)):
+        raise ValueError("Mapa: los binarios y recursos deben quedar dentro de addons/.")
+    for path in (*resources, *docs.values()):
+        file_bytes(root, path)
+
+
+def binary_paths(platform, mapping):
     suffix = {"linux": ".so", "windows": ".dll"}[platform]
-    names = [stem + suffix for stem in MAP["artifact"]["binaries"]]
-    check_paths(names)
-    return names
+    return [stem + suffix for stem in mapping["artifact"]["binaries"]]
 
 
 def reject_link(path):
@@ -92,32 +157,35 @@ def file_bytes(base, name):
     return path.read_bytes()
 
 
-def binary_hashes(build, platform):
+def binary_hashes(build, platform, mapping):
     hashes = {}
-    for name in binary_paths(platform):
+    for name in binary_paths(platform, mapping):
         blob = file_bytes(build / "package", name)
         validate_binary(blob, platform)
         hashes[name] = hashlib.sha256(blob).hexdigest()
     return hashes
 
 
-def git_commit():
+def git_commit(*, require_clean=True):
     git = shutil.which("git")
     if git is None or not (ROOT / ".git").exists():
         return None
-    status = subprocess.run([git, "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True)
-    if status.returncode or status.stdout:
-        return None
+    if require_clean:
+        status = subprocess.run([git, "--no-optional-locks", "status", "--porcelain"],
+                                cwd=ROOT, capture_output=True, text=True)
+        if status.returncode or status.stdout:
+            return None
     head = subprocess.run([git, "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True)
     return head.stdout.strip() if head.returncode == 0 else None
 
 
-def record_build(build, platform, digest):
+def record_build(build, platform, digest, dependencies, mapping):
     receipt = {
         "platform": platform,
         "sources": digest,
+        "dependencies": dependencies,
         "commit": git_commit(),
-        "binaries": binary_hashes(build, platform),
+        "binaries": binary_hashes(build, platform, mapping),
     }
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=build, delete=False) as output:
         pending = Path(output.name)
@@ -128,10 +196,9 @@ def record_build(build, platform, digest):
         pending.unlink(missing_ok=True)
 
 
-def products(build, platform, *, with_receipt=False):
-    artifact = MAP["artifact"]
-    check_paths([*binary_paths(platform), *artifact["resources"], *artifact["documentation"]])
-    check_paths(artifact["documentation"].values())
+def products(build, platform, inputs, mapping, *, with_receipt=False):
+    validate_map(mapping)
+    artifact = mapping["artifact"]
     receipt_path = build / ".build-complete"
     try:
         receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
@@ -140,9 +207,12 @@ def products(build, platform, *, with_receipt=False):
     if not isinstance(receipt, dict) or receipt.get("platform") != platform or receipt.get("sources") != source_digest():
         raise ValueError(f"El build quedó obsoleto. Ejecuta make build-exts-{platform}.")
 
+    if receipt.get("dependencies") != dependency_identities(inputs):
+        raise ValueError(f"Cambiaron las dependencias del recibo. Ejecuta make build-exts-{platform}.")
+
     files = {}
     expected = receipt.get("binaries")
-    if not isinstance(expected, dict) or expected.keys() != set(binary_paths(platform)):
+    if not isinstance(expected, dict) or expected.keys() != set(binary_paths(platform, mapping)):
         raise ValueError("El recibo de build no contiene el inventario esperado.")
     for name, digest in expected.items():
         blob = file_bytes(build / "package", name)
@@ -206,15 +276,23 @@ def release_documents(files, receipt, platform, channel):
     if os.environ.get("GITHUB_ACTIONS") == "true" and commit != os.environ["GITHUB_SHA"]:
         raise ValueError("El recibo debe corresponder al commit limpio de CI.")
     if commit and re.fullmatch(r"[0-9a-f]{40}", commit):
-        revision = (
-            f"[{commit}](https://github.com/AoC-Gamers/SourceTV-Support/tree/{commit})"
-        )
+        revision = f"[{commit}]({REPOSITORY}/tree/{commit})"
     else:
         revision = f"Fuentes locales SHA-256 `{receipt['sources']}`"
     identity = f"**Distribución** `{channel}` · {platform} x86 · {revision}"
+    link_commit = commit or git_commit(require_clean=False)
+
+    def resolve_docs_link(match):
+        path, fragment = match.groups()
+        if not link_commit:
+            return REPOSITORY
+        return f"{REPOSITORY}/blob/{link_commit}/{quote(path)}{fragment or ''}"
+
     documents = {}
     for name in ("README.md", "CHANGELOG.md"):
         title, _, body = files[name].decode("utf-8").partition("\n")
+        body = re.sub(r"(?<=\]\()(docs/[A-Za-z0-9_./-]+)(#[^ )]+)?(?=\))",
+                      resolve_docs_link, body)
         documents[name] = f"{title}\n\n{identity}\n{body}".encode("utf-8")
     return documents
 
@@ -226,13 +304,15 @@ def main():
     parser.add_argument("--build", type=Path, required=True)
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--channel", required=True)
+    add_input_arguments(parser)
     args = parser.parse_args()
     if not re.fullmatch(r"(?:develop|latest|[0-9a-f]{7,12}|[0-9]+\.[0-9]+(?:\.[0-9]+)?(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?)", args.channel):
         parser.error("Canal, SHA corto o versión no válidos.")
 
+    mapping = load_map()
+    files, receipt = products(args.build, args.platform, args, mapping, with_receipt=True)
     stage = args.dist / args.platform / "artifact"
-    archive = args.dist / "release" / f"{MAP['name']}-{args.channel}-{args.platform}.zip"
-    files, receipt = products(args.build, args.platform, with_receipt=True)
+    archive = args.dist / "release" / f"{mapping['name']}-{args.channel}-{args.platform}.zip"
     if args.action == "stage":
         stage.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory(prefix=".stage-", dir=stage.parent) as work:

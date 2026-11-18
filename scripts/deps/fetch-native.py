@@ -10,7 +10,7 @@ import sys
 import tempfile
 
 
-ROOT = Path(__file__).resolve().parents[2]
+from provenance import ROOT, checkout_identity, read_lock
 GITHUB = "https://github.com/alliedmodders"
 REPOSITORIES = {
     "HL2SDK_COMMIT": ("hl2sdk", "hl2sdk-l4d2", False),
@@ -32,9 +32,7 @@ def checkout(base, revision, spec):
     repo, name, recursive = spec
     target = base / name
     if target.exists():
-        actual = run("git", "-C", target, "rev-parse", "HEAD", capture_output=True, text=True)
-        if actual.stdout.strip() != revision:
-            raise ValueError(f"{target} no está en {revision}. Usa otro DEPS_DIR.")
+        checkout_identity(target, revision)
         return
 
     with tempfile.TemporaryDirectory(prefix=f".{name}-", dir=base) as work:
@@ -45,6 +43,7 @@ def checkout(base, revision, spec):
         run("git", "-C", path, "checkout", "--quiet", "--detach", "FETCH_HEAD")
         if recursive:
             submodules(path)
+        checkout_identity(path, revision)
         path.rename(target)
 
 
@@ -56,9 +55,7 @@ def main():
 
     deps = args.deps.resolve()
     deps.mkdir(parents=True, exist_ok=True)
-    lock = dict(line.split("=", 1) for line in
-                (ROOT / "scripts/deps/build-deps.lock").read_text().splitlines()
-                if line and not line.startswith("#"))
+    lock = read_lock()
     for key, spec in REPOSITORIES.items():
         if key in lock:
             checkout(deps, lock[key], spec)

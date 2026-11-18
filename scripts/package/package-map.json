@@ -19,7 +19,7 @@
     "documentation": {
       "LICENSE": "LICENSE",
       "NOTICE.md": "NOTICE.md",
-      "README.md": "docs/installation/README.md",
+      "README.md": "README.md",
       "CHANGELOG.md": "CHANGELOG.md"
     }
   }
