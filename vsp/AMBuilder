@@ -17,5 +17,12 @@ for sdk_name in Extension.sdks:
 
     # vsp will not be recognized from vdf correctly with dots present in name
     binary = Extension.HL2ExtConfig(project, builder, cxx, 'vsp_' + sdk['name'], sdk)
+    if cxx.target.platform == 'linux':
+      # The SDK puts static tier1 after the shared libraries. Keep the early
+      # VSP's tier0 dependency and reject any unresolved link-time symbols.
+      linkflags = binary.compiler.linkflags
+      tier0 = linkflags.index('libtier0_srv.so')
+      linkflags[tier0:tier0 + 1] = ['-Wl,--push-state,--no-as-needed', 'libtier0_srv.so', '-Wl,--pop-state']
+      linkflags += ['-Wl,-z,defs']
 
 Extension.binaries += builder.Add(project)

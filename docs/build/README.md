@@ -43,6 +43,21 @@ prerelease. `master` y `main` actualizan `channel/latest`. Las actualizaciones
 de canal pueden dejar una pausa entre la retirada de la release anterior y
 la publicación de la nueva. Un fallo de subida se reintenta desde Actions.
 
+## Cobertura local
+
+Después de preparar las dependencias del build Linux, ejecuta
+`make test-coverage COVERAGE_PYTHON=/ruta/al/python` con GCC/gcov x86 y
+coverage.py 7.13.5 disponible en ese intérprete. Usa el mismo `BUILD_DIR`
+al generar el recibo y al analizar. Las mediciones C++ y Python se guardan
+por separado en `.build/coverage/`. El baseline C++ conserva con cero hits
+las líneas ejecutables del build que las pruebas nativas no alcanzaron.
+La prueba Python incluye los subprocesos de las pruebas de paquete.
+
+Para adjuntar las mediciones al análisis explícito, configura
+`SONAR_COVERAGE_RECEIPT` con la ruta de `receipt.json`. El backend comprueba
+las huellas de fuentes, base de compilación e informes antes del análisis.
+El análisis y la cobertura quedan fuera de CI y del ZIP.
+
 ## Sonar local
 
 Tras un build Linux, `make sonar-cppcheck` usa las órdenes reales de compilación

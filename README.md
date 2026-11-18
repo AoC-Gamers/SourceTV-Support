@@ -24,8 +24,15 @@ para Left 4 Dead 2 x86. Copia el árbol `addons/` del ZIP de la plataforma a
 2. Conserva `addons/sourcetvsupport_vsp_l4d2.vdf` para cargar el VSP.
 3. Usa `-hltv` para habilitar transmisiones y `+tv_enable 1` para habilitar
    SourceTV desde el primer mapa. Configura `tv_port` si necesitas otro puerto.
-4. Confirma la carga de la extensión con `sm exts list` y del VSP con
-   `plugin_print` en la consola del servidor.
+4. Confirma la carga de la extensión con `sm exts list`. Para el VSP, busca
+   `[STVS] VSP early setup complete` en el log de arranque y comprueba que
+   `tv_enable` vale `1` desde el primer mapa y SourceTV acepta espectadores.
+
+El VDF carga el VSP al arrancar. El VSP retira `FCVAR_DEVELOPMENTONLY` de
+las cvars SourceTV y auxiliares que encuentra, registra cuántas faltan y
+solicita su descarga. Su salida deliberada explica que no quede listado en
+`plugin_print`. El mensaje `[STVS] VSP setup failed` identifica un fallo
+de acceso a la interfaz de cvars del motor.
 
 Consulta la [guía de compilación](docs/build/README.md). Los ZIP están en
 [Releases](https://github.com/AoC-Gamers/SourceTV-Support/releases).

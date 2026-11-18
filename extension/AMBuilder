@@ -4,6 +4,11 @@ import os.path
 project = builder.LibraryProject('sourcetvsupport')
 project.sources += [
   'extension.cpp',
+  'bindings.cpp',
+  'demo_tables.cpp',
+  'sdk_lifecycle.cpp',
+  'transmission.cpp',
+  'wrappers.cpp',
   os.path.join(Extension.sm_root, 'public', 'smsdk_ext.cpp'),
 ]
 

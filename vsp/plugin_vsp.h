@@ -9,8 +9,7 @@ class VSPPlugin :
 	public IServerPluginCallbacks
 {
 public: // IServerPluginCallbacks
-	// Initialize the plugin to run
-	// Return false if there is an error during startup.
+	// Apply the early cvar flags, then return false to request immediate unloading.
 	bool Load(CreateInterfaceFn interfaceFactory, CreateInterfaceFn gameServerFactory) override;
 
 	// Called when the plugin should be shutdown

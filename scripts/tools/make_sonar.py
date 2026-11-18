@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE_DIRECTORIES = ("extension", "vsp")
 SETTINGS = {"SONAR_HOST_URL", "SONAR_PROJECT_KEY", "SONAR_PROJECT_NAME",
             "SONAR_QUALITY_GATE_WAIT", "SONAR_QUALITY_GATE_TIMEOUT",
-            "SONAR_COMPILE_COMMANDS", "SONAR_CPPCHECK", "SONAR_SCANNER"}
+            "SONAR_COMPILE_COMMANDS", "SONAR_CPPCHECK", "SONAR_SCANNER", "SONAR_COVERAGE_RECEIPT"}
 
 
 class SonarError(Exception):
@@ -234,7 +234,15 @@ def run(action, default_database, root=ROOT):
     context = scanner_context(env) if action == "analyze" else None
     cppcheck = executable(env.get("SONAR_CPPCHECK") or "cppcheck", root)
     scanner = executable(env.get("SONAR_SCANNER") or "sonar-scanner", root) if context else None
-    entries = compilation_database(root, env.get("SONAR_COMPILE_COMMANDS") or default_database)
+    source_database = (root / (env.get("SONAR_COMPILE_COMMANDS") or default_database)).resolve()
+    coverage = []
+    if env.get("SONAR_COVERAGE_RECEIPT"):
+        from local_coverage import validate_receipt
+        try:
+            coverage = validate_receipt(root, Path(env["SONAR_COVERAGE_RECEIPT"]), source_database)
+        except (OSError, ValueError, KeyError, ET.ParseError) as error:
+            raise SonarError(f"Coverage receipt rejected: {error}") from None
+    entries = compilation_database(root, source_database)
     local_env = {k: v for k, v in env.items() if not k.startswith("SONAR_")}
     entries, global_context = compiler_identity(entries, root, local_env)
     # Each run gets a private output directory. A failed run cannot reuse old XML.
@@ -266,7 +274,8 @@ def run(action, default_database, root=ROOT):
                              f"-Dsonar.cxx.jsonCompilationDatabase={cxx_database}",
                              f"-Dsonar.cxx.cppcheck.reportPaths={report}",
                              f"-Dsonar.working.directory={output / 'scanner'}",
-                             f"-Dsonar.qualitygate.wait={wait}", f"-Dsonar.qualitygate.timeout={timeout}"],
+                             f"-Dsonar.qualitygate.wait={wait}", f"-Dsonar.qualitygate.timeout={timeout}",
+                             *(["-Dsonar.coverageReportPaths=" + ",".join(coverage)] if coverage else [])],
                             cwd=root, env={**env, "SONAR_HOST_URL": base}, capture_output=True, text=True)
     print(redact(result.stdout + result.stderr, env["SONAR_TOKEN"]))
     if result.returncode:

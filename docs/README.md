@@ -5,3 +5,4 @@
 - [Dependencias y revisiones](build/dependencies.md)
 
 - [Pruebas](../tests/README.md)
+- [Aceptación en SRCDS](testing/README.md)

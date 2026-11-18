@@ -1,0 +1,44 @@
+{
+  "baseline": "02e6f395baba81710c302463a2348b39ad520d90",
+  "contract": {
+    "libraries": [
+      "sourcetvsupport"
+    ],
+    "native_registrations": [],
+    "engine_cvars": [
+      "tv_delay",
+      "tv_snapshotrate",
+      "sv_master_share_game_socket",
+      "clientport"
+    ],
+    "vsp_entry_points": [
+      "EXPOSE_SINGLE_INTERFACE(VSPPlugin, IServerPluginCallbacks, INTERFACEVERSION_ISERVERPLUGINCALLBACKS);"
+    ],
+    "vsp_cvars": [
+      "tv_enable",
+      "tv_maxclients",
+      "tv_dispatchmode",
+      "tv_transmitall",
+      "tv_relayvoice",
+      "tv_debug",
+      "tv_deltacache",
+      "tv_password",
+      "tv_overridemaster",
+      "tv_autorecord",
+      "tv_name",
+      "tv_title",
+      "tv_autoretry",
+      "tv_timeout",
+      "tv_snapshotrate",
+      "tv_maxrate",
+      "tv_relaypassword",
+      "tv_chattimelimit",
+      "tv_chatgroupsize",
+      "tv_allow_camera_man",
+      "tv_allow_static_shots",
+      "tv_delay",
+      "sv_hibernate_when_empty",
+      "sv_master_share_game_socket"
+    ]
+  }
+}

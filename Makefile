@@ -30,6 +30,11 @@ help:
 	  'make release-<linux|windows>          Generar ZIP local (RELEASE_CHANNEL=develop|latest)' \
 	  'make validate-artifact-<linux|windows> Verificar staging y ZIP contra el build' \
 	  'make test                            Probar el contrato de distribución' \
+	  'make test-public-api                 Comparar el contrato público congelado' \
+	  'make test-native                     Ejecutar pruebas C++ puras (x86 por defecto)' \
+	  'make test-abi                        Ejecutar el probe de ABI Linux x86' \
+	  'make test-coverage                   Medir cobertura local C++ y Python' \
+	  'make test-vsp                        Probar el VSP compilado con el SDK Linux x86' \
 	  'make sonar-cppcheck / sonar          Analizar el build Linux localmente' \
 	  'make clean-<linux|windows>            Limpiar la salida de AMBuild'
 
@@ -55,10 +60,37 @@ release-linux release-windows:
 validate-artifact-linux validate-artifact-windows:
 	$(ARTIFACT_TOOL) validate $(ARTIFACT_ARGS)
 
-test-ci: test
+test-ci: test test-public-api
+
+.PHONY: test-public-api
+test-public-api:
+	$(PYTHON) -B "$(ROOT_DIR)/tests/contract.py"
 
 test:
 	$(PYTHON) -B -m unittest discover -s "$(ROOT_DIR)/tests/package"
+
+NATIVE_CXXFLAGS ?= -m32 -std=c++17 -Wall -Wextra
+
+.PHONY: test-native
+test-native:
+	@mkdir -p "$(ROOT_DIR)/.build"
+	@set -euo pipefail; \
+	  output="$$(mktemp -d "$(ROOT_DIR)/.build/native.XXXXXX")"; \
+	  printf 'Output: %s\n' "$$output"; \
+	  { $(CXX) --version; printf 'Flags: %s\n' "$(NATIVE_CXXFLAGS)"; } | tee "$$output/toolchain.txt"; \
+	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
+	    "$(ROOT_DIR)/tests/native/frame_retention.cpp" -o "$$output/test-native"; \
+	  "$$output/test-native" | tee "$$output/result.txt"; \
+	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
+	    "$(ROOT_DIR)/tests/native/demo_payload.cpp" -o "$$output/demo_payload"; \
+	  "$$output/demo_payload" | tee -a "$$output/result.txt"; \
+	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
+	    "$(ROOT_DIR)/tests/native/transmission_policy.cpp" -o "$$output/transmission_policy"; \
+	  "$$output/transmission_policy" | tee -a "$$output/result.txt"; \
+	  $(CXX) $(NATIVE_CXXFLAGS) -I"$(ROOT_DIR)/extension" \
+	    "$(ROOT_DIR)/tests/native/runtime_lifecycle.cpp" -o "$$output/runtime_lifecycle"; \
+	  "$$output/runtime_lifecycle" | tee -a "$$output/result.txt"
+
 
 sonar:
 	$(PYTHON) "$(SCRIPT_DIR)/tools/make_sonar.py" analyze --compile-commands "$(BUILD_DIR)/compile_commands.json"
@@ -82,3 +114,48 @@ test-package-coverage:
 	COVERAGE_FILE="$(PACKAGE_COVERAGE_DIR)/.coverage" "$(COVERAGE)" xml \
 	  -o "$(PACKAGE_COVERAGE_DIR)/coverage.xml"
 	COVERAGE_FILE="$(PACKAGE_COVERAGE_DIR)/.coverage" "$(COVERAGE)" report
+
+.PHONY: test-abi
+test-abi: PLATFORM := linux
+test-abi:
+	@mkdir -p "$(ROOT_DIR)/.build"
+	@set -euo pipefail; \
+	  output="$$(mktemp -d "$(ROOT_DIR)/.build/abi.XXXXXX")"; \
+	  sh_dir="$(MMSOURCE_DIR)/core/sourcehook"; \
+	  $(CXX) -m32 -std=c++17 -fno-devirtualize -I"$(ROOT_DIR)/extension" -isystem "$$sh_dir" \
+	    "$(ROOT_DIR)/tests/native/engine_binding.cpp" \
+	    "$$sh_dir/sourcehook.cpp" "$$sh_dir/sourcehook_impl_chookmaninfo.cpp" \
+	    "$$sh_dir/sourcehook_impl_chookidman.cpp" "$$sh_dir/sourcehook_impl_cproto.cpp" \
+	    "$$sh_dir/sourcehook_impl_cvfnptr.cpp" -o "$$output/engine-binding"; \
+	  "$$output/engine-binding" | tee "$$output/result.txt"
+
+.PHONY: test-vsp
+test-vsp: PLATFORM := linux
+test-vsp: build-exts-linux
+	@mkdir -p "$(ROOT_DIR)/.build"
+	@set -euo pipefail; \
+	  output="$$(mktemp -d "$(ROOT_DIR)/.build/vsp.XXXXXX")"; \
+	  sdk="$(HL2SDK_DIR)"; \
+	  vsp="$(BUILD_DIR)/package/addons/sourcetvsupport/bin/vsp_l4d2.so"; \
+	  $(CXX) -m32 -std=c++17 -Wall -Wextra -Werror "$(ROOT_DIR)/tests/native/vsp_load.cpp" -ldl -o "$$output/vsp-load"; \
+	  LD_LIBRARY_PATH="$$sdk/lib/linux" "$$output/vsp-load" "$$vsp"; \
+	  $(CXX) -m32 -std=c++17 -Wall -Wextra -Werror -DPOSIX -DLINUX -D_LINUX -DGNUC -DCOMPILER_GCC \
+	    -isystem "$$sdk/public" -isystem "$$sdk/public/engine" \
+	    -isystem "$$sdk/public/tier0" -isystem "$$sdk/public/tier1" \
+	    "$(ROOT_DIR)/tests/native/vsp_startup.cpp" \
+	    "$(BUILD_DIR)/l4d2_tier1/linux-x86/libl4d2_tier1.a" \
+	    -L"$$sdk/lib/linux" -lvstdlib_srv -ltier0_srv -ldl -o "$$output/vsp-startup"; \
+	  LD_LIBRARY_PATH="$$sdk/lib/linux" \
+	    "$$output/vsp-startup" "$$vsp" \
+	    > "$$output/stdout.txt" 2> "$$output/stderr.txt" || { cat "$$output/"{stdout,stderr}.txt; exit 1; }; \
+	  cat "$$output/"{stdout,stderr}.txt; \
+	  test "$$(grep -Fxc '[STVS] VSP setup failed: engine factory did not provide VEngineCvar007.' "$$output/stderr.txt")" = 3; \
+	  test "$$(grep -Fxc '[STVS] VSP early setup complete: 0 of 24 cvars available (24 missing). Exiting as intended.' "$$output/stdout.txt")" = 1; \
+	  test "$$(grep -Fxc '[STVS] VSP early setup complete: 3 of 24 cvars available (21 missing). Exiting as intended.' "$$output/stdout.txt")" = 2
+
+COVERAGE_PYTHON ?= $(PYTHON)
+
+.PHONY: test-coverage
+test-coverage: PLATFORM := linux
+test-coverage: build-exts-linux
+	$(PYTHON) "$(SCRIPT_DIR)/tools/local_coverage.py" --compile-commands "$(BUILD_DIR)/compile_commands.json" --coverage-python "$(COVERAGE_PYTHON)"

@@ -2,6 +2,7 @@
 #define _INCLUDE_WRAPPERS_H_
 
 #include <extensions/IBinTools.h>
+#include "engine_binding.h"
 
 #include <iserver.h>
 #include <ihltvdirector.h>
@@ -34,34 +35,8 @@ extern IPlayerInfoManager* playerinfomanager;
 
 class CDetour;
 
-void DataTable_WriteClassInfosBuffer(ServerClass* pClasses, bf_write* pBuf)
-{
-	int count = 0;
-	ServerClass* pClass = pClasses;
-
-	// first count total number of classes in list
-	while (pClass != NULL) {
-		pClass = pClass->m_pNext;
-		count++;
-	}
-
-	// write number of classes
-	pBuf->WriteShort(count);
-
-	pClass = pClasses; // go back to first class
-
-	// write each class info
-	while (pClass != NULL) {
-		pBuf->WriteShort(pClass->m_ClassID);
-		pBuf->WriteString(pClass->m_pNetworkName);
-		pBuf->WriteString(pClass->m_pTable->GetName());
-		pClass = pClass->m_pNext;
-	}
-}
-
 extern int shookid_CHLTVDemoRecorder_RecordStringTables;
 extern int shookid_CHLTVDemoRecorder_RecordServerClasses;
-extern int shookid_SteamGameServer_LogOff;
 
 extern void* pfn_DataTable_WriteSendTablesBuffer;
 extern void* pfn_SteamGameServer_GetHSteamPipe;
@@ -72,35 +47,18 @@ extern void* pfn_OpenSocketInternal;
 
 extern CDetour* detour_SteamInternal_GameServer_Init;
 
-void InvokeDataTable_WriteSendTablesBuffer(ServerClass* pClasses, bf_write* buf)
-{
-	void DataTable_WriteSendTablesBuffer(ServerClass * pClasses, bf_write * buf);
-	return reinterpret_cast<decltype(DataTable_WriteSendTablesBuffer)*>(pfn_DataTable_WriteSendTablesBuffer)(pClasses, buf);
-}
+void InvokeDataTable_WriteSendTablesBuffer(ServerClass* pClasses, bf_write* buf);
 
 // Steam API
 #if SOURCE_ENGINE == SE_LEFT4DEAD2
-void* InvokeCreateInterface(const char* ver)
-{
-	return reinterpret_cast<decltype(SteamInternal_CreateInterface)*>(pfn_SteamInternal_CreateInterface)(ver);
-}
+void* InvokeCreateInterface(const char* ver);
 
-HSteamPipe InvokeGetHSteamPipe()
-{
-	return reinterpret_cast<decltype(SteamGameServer_GetHSteamPipe)*>(pfn_SteamGameServer_GetHSteamPipe)();
-}
+HSteamPipe InvokeGetHSteamPipe();
 
-HSteamUser InvokeGetHSteamUser()
-{
-	return reinterpret_cast<decltype(SteamGameServer_GetHSteamUser)*>(pfn_SteamGameServer_GetHSteamUser)();
-}
+HSteamUser InvokeGetHSteamUser();
 #endif
 
-void InvokeOpenSocketInternal(int nModule, int nSetPort, int nDefaultPort, const char* pName, bool bTryAny)
-{
-	void OpenSocketInternal(int nModule, int nSetPort, int nDefaultPort, const char* pName, bool bTryAny);
-	return reinterpret_cast<decltype(OpenSocketInternal)*>(pfn_OpenSocketInternal)(nModule, nSetPort, nDefaultPort, pName, bTryAny);
-}
+void InvokeOpenSocketInternal(int nModule, int nSetPort, int nDefaultPort, const char* pName, bool bTryAny);
 
 class CBaseClient :
 	public IGameEventListener2,
@@ -108,7 +66,7 @@ class CBaseClient :
 	public IClientMessageHandler
 {
 public:
-	static int offset_m_SteamID;
+	static std::optional<sourcetv::abi::FieldOffset> offset_m_SteamID;
 
 	static void* pfn_SendFullConnectEvent;
 
@@ -116,7 +74,7 @@ public:
 
 	CSteamID& m_SteamID()
 	{
-		return *reinterpret_cast<CSteamID*>(reinterpret_cast<byte*>(this) + offset_m_SteamID);
+		return *reinterpret_cast<CSteamID*>(reinterpret_cast<byte*>(this) + offset_m_SteamID->Bytes());
 	}
 };
 
@@ -124,12 +82,12 @@ class CBaseServer
 	: public IServer
 {
 public:
-	static int offset_stringTableCRC;
-	static int vtblindex_GetChallengeNr;
-	static int vtblindex_GetChallengeType;
-	static int vtblindex_ReplyChallenge;
-	static int vtblindex_FillServerInfo;
-	static int vtblindex_ConnectClient;
+	static std::optional<sourcetv::abi::FieldOffset> offset_stringTableCRC;
+	static std::optional<sourcetv::abi::VtableSlot> vtblindex_GetChallengeNr;
+	static std::optional<sourcetv::abi::VtableSlot> vtblindex_GetChallengeType;
+	static std::optional<sourcetv::abi::VtableSlot> vtblindex_ReplyChallenge;
+	static std::optional<sourcetv::abi::VtableSlot> vtblindex_FillServerInfo;
+	static std::optional<sourcetv::abi::VtableSlot> vtblindex_ConnectClient;
 
 	static void* pfn_IsExclusiveToLobbyConnections;
 
@@ -150,12 +108,12 @@ public:
 
 	CRC32_t& stringTableCRC()
 	{
-		return *reinterpret_cast<CRC32_t*>(reinterpret_cast<byte*>(this) + offset_stringTableCRC);
+		return *reinterpret_cast<CRC32_t*>(reinterpret_cast<byte*>(this) + offset_stringTableCRC->Bytes());
 	}
 
 	INetworkStringTableContainer* m_StringTables()
 	{
-		return *reinterpret_cast<INetworkStringTableContainer**>(reinterpret_cast<byte*>(this) + offset_stringTableCRC + 4);
+		return *reinterpret_cast<INetworkStringTableContainer**>(reinterpret_cast<byte*>(this) + offset_stringTableCRC->Bytes() + 4);
 	}
 
 	int GetChallengeNr(netadr_t& adr)
@@ -188,11 +146,11 @@ public:
 class CHLTVServer
 {
 public:
-	static int offset_m_DemoRecorder;
-	static int offset_CClientFrameManager;
-	static int offset_CBaseServer;
+	static std::optional<sourcetv::abi::FieldOffset> offset_m_DemoRecorder;
+	static std::optional<sourcetv::abi::FieldOffset> offset_CClientFrameManager;
+	static std::optional<sourcetv::abi::BaseAdjustment> offset_CBaseServer;
 
-	static int vtblindex_FillServerInfo;
+	static std::optional<sourcetv::abi::VtableSlot> vtblindex_FillServerInfo;
 
 	static int shookid_ReplyChallenge;
 	static int shookid_FillServerInfo;
@@ -205,17 +163,17 @@ public:
 
 	CHLTVDemoRecorder& m_DemoRecorder()
 	{
-		return *reinterpret_cast<CHLTVDemoRecorder*>(reinterpret_cast<byte*>(this) + offset_m_DemoRecorder);
+		return *reinterpret_cast<CHLTVDemoRecorder*>(reinterpret_cast<byte*>(this) + offset_m_DemoRecorder->Bytes());
 	}
 
 	CClientFrameManager& GetClientFrameManager()
 	{
-		return *reinterpret_cast<CClientFrameManager*>(reinterpret_cast<byte*>(this) + offset_CClientFrameManager);
+		return *reinterpret_cast<CClientFrameManager*>(reinterpret_cast<byte*>(this) + offset_CClientFrameManager->Bytes());
 	}
 
 	static CHLTVServer* FromBaseServer(CBaseServer* pServer)
 	{
-		return reinterpret_cast<CHLTVServer*>(reinterpret_cast<byte*>(pServer) - offset_CBaseServer);
+		return offset_CBaseServer ? static_cast<CHLTVServer*>(offset_CBaseServer->CompleteObject(pServer)) : nullptr;
 	}
 };
 
@@ -230,7 +188,7 @@ public:
 class CFrameSnapshotManager
 {
 public:
-	static int offset_m_PackedEntitiesPool;
+	static std::optional<sourcetv::abi::FieldOffset> offset_m_PackedEntitiesPool;
 
 	static void* pfn_RecordStringTables;
 	static void* pfn_RecordServerClasses;
@@ -241,7 +199,7 @@ public:
 
 	CClassMemoryPoolExt<PackedEntity>& m_PackedEntitiesPool()
 	{
-		return *reinterpret_cast<CClassMemoryPoolExt<PackedEntity>*>(reinterpret_cast<byte*>(this) + offset_m_PackedEntitiesPool);
+		return *reinterpret_cast<CClassMemoryPoolExt<PackedEntity>*>(reinterpret_cast<byte*>(this) + offset_m_PackedEntitiesPool->Bytes());
 	}
 };
 
@@ -267,32 +225,14 @@ class CBasePlayer :
 	public CBaseEntity
 {
 public:
-	static int sendprop_m_fFlags;
+	static std::optional<sourcetv::abi::FieldOffset> sendprop_m_fFlags;
 
 	IGamePlayer* GetIGamePlayer()
 	{
 		return playerhelpers->GetGamePlayer(edict());
 	}
 
-	inline int& m_fFlags()
-	{
-		return *(int*)((byte*)(this) + sendprop_m_fFlags);
-	}
-
-	int GetFlags()
-	{
-		return m_fFlags();
-	}
-
-	void AddFlag(int flags)
-	{
-		m_fFlags() |= flags;
-
-		edict_t* pEdict = this->edict();
-		if (pEdict != NULL) {
-			gamehelpers->SetEdictStateChanged(pEdict, sendprop_m_fFlags);
-		}
-	}
+	void AddFlag(int flags);
 
 	bool IsHLTV()
 	{
@@ -358,16 +298,6 @@ public:
 	bool m_bIgnoreTeamCheck;
 };
 
-CBasePlayer* UTIL_PlayerByIndex(int playerIndex)
-{
-	if (playerIndex > 0 && playerIndex <= playerhelpers->GetMaxClients()) {
-		IGamePlayer* pPlayer = playerhelpers->GetGamePlayer(playerIndex);
-		if (pPlayer != NULL) {
-			return (CBasePlayer*)gameents->EdictToBaseEntity(pPlayer->GetEdict());
-		}
-	}
-
-	return NULL;
-}
+CBasePlayer* UTIL_PlayerByIndex(int playerIndex);
 
 #endif // _INCLUDE_WRAPPERS_H_

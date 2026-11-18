@@ -29,6 +29,8 @@
 // Metamod Source
 #include <sourcehook.h>
 
+#include "runtime_resources.h"
+
 #if defined _WIN32
 #	define LIBSTEAMAPI_FILE "steam_api.dll"
 #else
@@ -57,19 +59,33 @@ class IClient;
 class SMExtension :
 	public SDKExtension
 {
-public:
-	void Load();
-	void Unload();
-
 private:
+	enum class Phase { Stopped, Prepared, Active };
+
+	bool Load(char* error, size_t maxlength);
+	void Unload();
 	bool SetupFromGameConfig(IGameConfig* gc, char* error, int maxlength);
 	bool SetupFromSteamAPILibrary(char* error, int maxlength);
+	void ClearSteamBindings();
 	bool CreateDetours(char* error, size_t maxlength);
+	bool CreateVCalls(char* error, size_t maxlength);
+	bool EnableDetours(char* error, size_t maxlength);
+	bool BindHLTVServer(IHLTVServer* server, char* error, size_t maxlength);
+	void RepairHLTVServer(IHLTVServer* server);
+	bool BindSteamLogOff(char* error, size_t maxlength);
+	void FailRuntime();
+
+	Phase m_Phase = Phase::Stopped;
+	char m_LifecycleError[256]{};
+	int m_DirectorHook = 0;
+	int m_LogOffHook = 0;
+	ke::RefPtr<ke::SharedLib> m_SteamModule;
+	sourcetv::RuntimeResources<11> m_Resources;
+	sourcetv::RuntimeResources<7> m_HLTVHooks;
+	sourcetv::RuntimeResources<1> m_SteamHooks;
 
 public:
-	void OnGameServer_Init();
-	void OnGameServer_Shutdown();
-	void OnSetHLTVServer(IHLTVServer* pIHLTVServer);
+	void OnGameServerInitResult(bool initialized);
 
 public: // SourceHook callbacks
 	void Handler_CHLTVDirector_SetHLTVServer(IHLTVServer* pHLTVServer);

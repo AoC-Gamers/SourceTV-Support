@@ -41,3 +41,21 @@ La extensión usa SafetyHook directamente desde el checkout de SourceMod.
 Los commits concretos están en el lock o en los submódulos asociados. Los
 resultados de compilación describen la matriz probada del toolchain. La
 compatibilidad mínima de carga se comprueba por juego y versión en SRCDS.
+
+
+## Ciclo de vida en el servidor
+
+BinTools mantiene los call wrappers durante la ejecución. Si se descarga,
+Support los destruye en la notificación de SourceMod, antes de que se cierre
+el módulo de BinTools. SDKTools solo resuelve `IServer` durante el arranque.
+El motor es dueño del servidor, por lo que Support puede seguir activo si
+SDKTools se descarga después de que el puntero quede resuelto.
+
+Support retiene una referencia a la biblioteca `steam_api` del juego desde
+que resuelve sus símbolos hasta que retira los hooks y detours. Steam conserva
+la propiedad de las interfaces. Un inicio de Steam exitoso reemplaza el hook
+de `LogOff` por el del contexto que se pueda resolver. Si el original falla,
+Support retira el hook anterior y propaga el fallo. Si Steam aún carece de
+contexto, Support activa el resto de sus correcciones y vuelve a intentar el
+binding en la próxima inicialización exitosa. El puerto de consulta conserva
+la regla existente, incluido el valor reservado al compartir el socket de juego.
