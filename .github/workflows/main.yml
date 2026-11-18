@@ -141,6 +141,7 @@ jobs:
         with:
           pattern: sourcetvsupport-${{ needs.identity.outputs.channel }}-*.zip
           merge-multiple: true
+          skip-decompress: true
           path: dist/release
       - name: Publicar los dos ZIP validados
         shell: bash
