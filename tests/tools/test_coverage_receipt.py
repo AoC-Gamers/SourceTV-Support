@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-3.0-only
 import json
 import os
+import subprocess
 from pathlib import Path
 import sys
 import tempfile
@@ -113,6 +114,74 @@ class CoverageReceiptTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "inputs changed during execution"):
                 coverage.main()
         self.assertFalse(list((self.root / ".build/coverage").glob("*/receipt.json")))
+
+    def test_runtime_coverage_validates_counters_and_matching_build(self):
+        build = self.root / "runtime"
+        binary = build / "package/product.so"
+        binary.parent.mkdir(parents=True)
+        binary.write_bytes(b"fixture")
+        baseline = {"sources": "snapshot", "platform": "linux", "dependencies": {}}
+        baseline["binaries"] = {binary.name: coverage.digest(binary)}
+        (self.root / ".build-complete").write_text(json.dumps(baseline))
+        runtime_receipt = build / ".build-complete"
+        runtime_receipt.write_text(json.dumps({**baseline, "coverage": True}))
+
+        entry, = json.loads(self.db.read_text())
+        entry["directory"] = str(build)
+        entry["arguments"].extend(coverage.RUNTIME_FLAGS)
+        entry["output"] = "product.o"
+        runtime_db = build / self.db.name
+        runtime_db.write_text(json.dumps([entry]))
+        counter = build / "product.gcda"
+        notes = counter.with_suffix(".gcno")
+        notes.write_bytes(b"notes")
+        counter.write_bytes(b"counter")
+        counters, inputs = coverage.runtime_inputs(self.root, self.db, build)
+        self.assertEqual(counters, [counter])
+        self.record["runtime"] = {"build": str(build), "inputs": inputs}
+        self.write_receipt()
+        self.assertEqual(len(self.validate()), 2)
+
+        counter.write_bytes(b"other counter")
+        with self.assertRaisesRegex(ValueError, "Runtime coverage inputs changed"):
+            self.validate()
+        counter.unlink()
+        with self.assertRaisesRegex(ValueError, "Missing runtime counter"):
+            self.validate()
+        counter.write_bytes(b"counter")
+
+        entry["arguments"].append("-O2")
+        runtime_db.write_text(json.dumps([entry]))
+        with self.assertRaisesRegex(ValueError, "differs beyond coverage flags"):
+            self.validate()
+        entry["arguments"].pop()
+        runtime_db.write_text(json.dumps([entry]))
+
+        binary.write_bytes(b"other binary")
+        with self.assertRaisesRegex(ValueError, "Instrumented binary changed"):
+            self.validate()
+        binary.write_bytes(b"fixture")
+        baseline["sources"] = "obsolete"
+        runtime_receipt.write_text(json.dumps({**baseline, "coverage": True}))
+        with self.assertRaisesRegex(ValueError, "Instrumented build differs in sources"):
+            self.validate()
+
+    def test_runtime_gcov_rejects_mismatched_data(self):
+        source = self.root / "extension/product.cpp"
+        source.write_text("int main() { return 0; }\n")
+        binary = self.root / "product"
+        subprocess.run(["g++", "-m32", *coverage.RUNTIME_FLAGS, str(source), "-o", str(binary)],
+                       cwd=self.root, check=True)
+        subprocess.run([str(binary)], cwd=self.root, check=True)
+        counter, = self.root.glob("*.gcda")
+        lines = {}
+        with patch.object(coverage, "ROOT", self.root):
+            coverage.runtime_lines([counter], "gcov", coverage.coverage_environment(), lines)
+            self.assertEqual(lines, {"extension/product.cpp": {1: True}})
+            notes = counter.with_suffix(coverage.GCOV_NOTES_SUFFIX)
+            notes.unlink()
+            with self.assertRaisesRegex(ValueError, "Runtime gcov rejected"):
+                coverage.runtime_lines([counter], "gcov", coverage.coverage_environment(), {})
 
     def test_scanner_only_receives_current_reports(self):
         cppcheck = self.root / "cppcheck"

@@ -1,15 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Extracted from SourceTV-Support by Evgeniy Kazakov and contributors.
 #include "extension.h"
-#include "wrappers.h"
+#include <inetmsghandler.h>
 #include "sdk/public/engine/inetsupport.h"
 
-#include <extensions/ISDKTools.h>
 #include <am-string.h>
+#include <extensions/IBinTools.h>
+#include <extensions/ISDKTools.h>
+#include <game/server/iplayerinfo.h>
+#include <ihltvdirector.h>
+#include <networkstringtabledefs.h>
 
 extern INetworkStringTableContainer* networkStringTableContainerServer;
 extern INetSupport* g_pNetSupport;
 extern IHLTVDirector* hltvdirector;
+extern IPlayerInfoManager* playerinfomanager;
+extern IServerGameEnts* gameents;
 extern IBinTools* bintools;
 extern ISDKTools* sdktools;
 extern IServer* g_pGameIServer;

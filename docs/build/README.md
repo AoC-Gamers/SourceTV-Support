@@ -65,6 +65,30 @@ distinto, indica el gcov correspondiente mediante `GCOV`.
 `make test-coverage-tooling` verifica el recibo y la importación simulada.
 El análisis y la cobertura quedan fuera de CI y del ZIP.
 
+Para incluir una sesión Linux x86 de SRCDS en la medición, usa un segundo
+directorio de build y un servidor de pruebas aislado.
+
+```bash
+make build-coverage-linux BUILD_DIR="$PWD/.build/runtime-coverage"
+```
+
+Instala en esa instancia los binarios y recursos de `package/addons/` del build
+instrumentado. Ejecuta los escenarios de [aceptación](../testing/README.md) que
+se quieran medir y cierra SRCDS normalmente para escribir los contadores GCC.
+Si usas `GCOV_PREFIX`, devuelve cada archivo `.gcda` a la ruta de su `.gcno`
+en el build que lo generó. Conserva logs del escenario y usa un directorio nuevo
+para cada candidato. Para incluir la prueba autónoma del VSP en los mismos
+contadores, ejecuta `make test-vsp COVERAGE_BUILD=1 BUILD_DIR="$PWD/.build/runtime-coverage"`.
+
+```bash
+make test-coverage COVERAGE_RUNTIME_BUILD="$PWD/.build/runtime-coverage"
+```
+
+`BUILD_DIR` sigue señalando el build Linux normal en esta última orden.
+La medición verifica que las fuentes, dependencias y órdenes coincidan con el
+build instrumentado, salvo los flags de cobertura. El empaquetador rechaza
+el build instrumentado.
+
 ## Sonar local
 
 Tras un build Linux, `make sonar-cppcheck` usa las órdenes reales de compilación

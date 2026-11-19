@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "demo_payload.h"
+#include "demo/demo_payload.h"
 
 #include <climits>
 #include <cstdio>

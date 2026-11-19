@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Extracted from SourceTV-Support by Evgeniy Kazakov and contributors.
 #include "extension.h"
-#include "wrappers.h"
-#include "demo_payload.h"
+#include "demo/demo_payload.h"
+#include "engine/demo_writer.h"
+#include "sdk/engine/hltvdemo.h"
+
+#include <networkstringtabledefs.h>
+#include <server_class.h>
 
 #include <vector>
 

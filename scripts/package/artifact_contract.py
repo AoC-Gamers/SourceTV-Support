@@ -179,7 +179,7 @@ def git_commit(*, require_clean=True):
     return head.stdout.strip() if head.returncode == 0 else None
 
 
-def record_build(build, platform, digest, dependencies, mapping):
+def record_build(build, platform, digest, dependencies, mapping, *, coverage=False):
     receipt = {
         "platform": platform,
         "sources": digest,
@@ -187,6 +187,8 @@ def record_build(build, platform, digest, dependencies, mapping):
         "commit": git_commit(),
         "binaries": binary_hashes(build, platform, mapping),
     }
+    if coverage:
+        receipt["coverage"] = True
     with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=build, delete=False) as output:
         pending = Path(output.name)
         json.dump(receipt, output, sort_keys=True)
@@ -207,6 +209,8 @@ def products(build, platform, inputs, mapping, *, with_receipt=False):
     if not isinstance(receipt, dict) or receipt.get("platform") != platform or receipt.get("sources") != source_digest():
         raise ValueError(f"El build quedó obsoleto. Ejecuta make build-exts-{platform}.")
 
+    if receipt.get("coverage"):
+        raise ValueError("Un build instrumentado para cobertura no se puede empaquetar.")
     if receipt.get("dependencies") != dependency_identities(inputs):
         raise ValueError(f"Cambiaron las dependencias del recibo. Ejecuta make build-exts-{platform}.")
 

@@ -17,6 +17,29 @@ inline int AbilityTransmission(int original, int always, AbilityAudience audienc
 	return audience == AbilityAudience::Player ? original : always;
 }
 
+template <typename TransmitInfo, typename Lookup>
+int AbilityTransmissionForViewer(int original, int always, int spectatorTeam,
+	const TransmitInfo* info, Lookup lookup)
+{
+	if (original == always || !info)
+		return original;
+
+	auto* player = lookup(info->m_pClientEnt);
+	if (!player)
+		return original;
+
+	auto* playerInfo = player->GetPlayerInfo();
+	if (!playerInfo)
+		return original;
+
+	if (player->IsSourceTV())
+		return AbilityTransmission(original, always, AbilityAudience::SourceTV);
+
+	const auto audience = playerInfo->GetTeamIndex() == spectatorTeam
+		? AbilityAudience::Spectator : AbilityAudience::Player;
+	return AbilityTransmission(original, always, audience);
+}
+
 template <typename Visit>
 void VisitPlayerEdicts(const unsigned short* indices, int count, int maxClients, Visit visit)
 {

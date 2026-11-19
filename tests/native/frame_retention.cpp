@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "frame_retention.h"
+#include "hooks/frame_retention.h"
 
 #include <cassert>
 #include <climits>

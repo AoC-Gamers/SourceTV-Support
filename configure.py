@@ -33,6 +33,8 @@ parser.options.add_argument('--enable-debug', action='store_const', const='1', d
                        help='Enable debugging symbols')
 parser.options.add_argument('--enable-optimize', action='store_const', const='1', dest='opt',
                        help='Enable optimization')
+parser.options.add_argument('--enable-coverage', action='store_true',
+                       help='Instrument Linux extension and VSP for local runtime coverage')
 parser.options.add_argument('-s', '--sdks', default='l4d2', choices=('l4d2', 'all', 'present'), dest='sdks',
                        help='Build SourceTV Support against the Left 4 Dead 2 SDK.')
 parser.options.add_argument('--targets', type=str, dest='targets', default=None,

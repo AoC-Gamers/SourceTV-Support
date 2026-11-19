@@ -18,6 +18,8 @@ import make_sonar
 ROOT = Path(__file__).resolve().parents[2]
 AREAS = (*make_sonar.SOURCE_DIRECTORIES, "scripts", "tests", "addons")
 COVERAGE_FLAGS = ["--coverage", "-fprofile-abs-path"]
+RUNTIME_FLAGS = [*COVERAGE_FLAGS, "-O0"]
+GCOV_NOTES_SUFFIX = ".gcno"
 BUILD_ENVIRONMENT = ("PATH", "GCC_EXEC_PREFIX", "COMPILER_PATH", "LIBRARY_PATH", "CPATH",
                      "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH", "DEPENDENCIES_OUTPUT",
                      "SUNPRO_DEPENDENCIES", "SOURCE_DATE_EPOCH", "PYTHONPATH", "PYTHONHOME")
@@ -200,9 +202,62 @@ def native_lines(output, suites, units, gcov, env):
             obj = output / f"unit-{index}.o"
             subprocess.run([*command, "-o", str(obj)], cwd=directory, env=env,
                            stdout=stream, stderr=subprocess.STDOUT, check=True)
-            merge_gcov(read_gcov(obj.with_suffix(".gcno"), gcov, env), lines, baseline=True)
+            merge_gcov(read_gcov(obj.with_suffix(GCOV_NOTES_SUFFIX), gcov, env), lines, baseline=True)
     return lines, {"units": len(units),
                    "counter_sha256": {p.name: digest(p) for p in counters}}
+
+
+def runtime_counters(root, database, runtime_build, runtime_db):
+    normal = {entry["file"]: entry["arguments"] for entry in make_sonar.compilation_database(root, database)}
+    counters = []
+    for entry in make_sonar.compilation_database(root, runtime_db):
+        command = entry["arguments"]
+        if (not all(command.count(flag) == 1 for flag in RUNTIME_FLAGS)
+                or [arg for arg in command if arg not in RUNTIME_FLAGS] != normal[entry["file"]]):
+            raise ValueError("Instrumented command differs beyond coverage flags")
+        counter = (Path(entry["directory"]) / entry["output"]).resolve().with_suffix(".gcda")
+        if not counter.is_relative_to(runtime_build) or not counter.with_suffix(GCOV_NOTES_SUFFIX).is_file() or not counter.is_file():
+            raise ValueError(f"Missing runtime counter or notes: {Path(entry['file']).name}")
+        counters.append(counter)
+    return counters
+
+
+def runtime_inputs(root, database, runtime_build):
+    runtime_db = runtime_build / "compile_commands.json"
+    if database == runtime_db:
+        raise ValueError("Runtime coverage requires a separate instrumented build")
+    production_receipt = database.parent / ".build-complete"
+    runtime_receipt = runtime_build / production_receipt.name
+    production = json.loads(production_receipt.read_text())
+    instrumented = json.loads(runtime_receipt.read_text())
+    for key in ("sources", "dependencies", "platform"):
+        if instrumented[key] != production[key]:
+            raise ValueError(f"Instrumented build differs in {key}")
+    if (production["platform"] != "linux" or production.get("coverage")
+            or instrumented.get("coverage") is not True
+            or instrumented["binaries"].keys() != production["binaries"].keys()):
+        raise ValueError("Runtime coverage requires matching Linux x86 binaries")
+
+    files = [runtime_db, runtime_receipt, production_receipt]
+    for name, expected in instrumented["binaries"].items():
+        binary = runtime_build / "package" / name
+        if digest(binary) != expected:
+            raise ValueError(f"Instrumented binary changed: {name}")
+        files.append(binary)
+
+    counters = runtime_counters(root, database, runtime_build, runtime_db)
+    for counter in counters:
+        files.extend((counter, counter.with_suffix(GCOV_NOTES_SUFFIX)))
+    return counters, {str(path): digest(path) for path in sorted(files)}
+
+
+def runtime_lines(counters, gcov, env, lines):
+    for counter in counters:
+        result = subprocess.run([gcov, "--json-format", "--stdout", str(counter)], cwd=ROOT,
+                                env=env, text=True, capture_output=True)
+        if result.returncode or result.stderr.strip():
+            raise ValueError(f"Runtime gcov rejected {counter.name}: {result.stderr.strip()}")
+        merge_gcov(json.loads(result.stdout), lines)
 
 
 def python_lines(output, python, env):
@@ -213,6 +268,7 @@ def python_lines(output, python, env):
     command = [python, "-m", "coverage"]
     with (output / "python-tests.log").open("w") as stream:
         for args in (["run", "-m", "unittest", "discover", "-s", "tests/package"],
+                     ["run", "-m", "unittest", "discover", "-s", "tests/tools"],
                      ["combine"], ["json", "-o", str(output / "python.json")]):
             subprocess.run([*command, *args], cwd=ROOT, env=env, stdout=stream,
                            stderr=subprocess.STDOUT, check=True)
@@ -246,6 +302,11 @@ def validate_receipt(root, receipt, database):
     context, _, _ = coverage_context(root, database, record["profile"], coverage_environment())
     if context != record.get("context"):
         raise ValueError("Coverage dependency or toolchain context changed")
+    if record.get("runtime"):
+        runtime = record["runtime"]
+        _, inputs = runtime_inputs(root, database, Path(runtime["build"]))
+        if inputs != runtime["inputs"]:
+            raise ValueError("Runtime coverage inputs changed")
     paths = []
     for kind, dirs in (("native", make_sonar.SOURCE_DIRECTORIES), ("python", ("scripts",))):
         entry = record["reports"][kind]
@@ -283,6 +344,7 @@ def main():
     parser.add_argument("--gcov", default="gcov")
     parser.add_argument("--native-flags")
     parser.add_argument("--native-tests")
+    parser.add_argument("--runtime-build", type=Path)
     parser.add_argument("--validate", type=Path)
     args = parser.parse_args()
     database = args.compile_commands.resolve()
@@ -301,9 +363,18 @@ def main():
     database_hash = digest(database)
     env = coverage_environment()
     context, units, suites = coverage_context(ROOT, database, profile, env)
+    runtime = None
+    if args.runtime_build:
+        runtime_build = args.runtime_build.resolve()
+        counters, inputs = runtime_inputs(ROOT, database, runtime_build)
+        runtime = {"build": str(runtime_build), "inputs": inputs}
+    native, native_inputs = native_lines(output, suites, units, context["gcov"]["path"], env)
+    if runtime:
+        runtime_lines(counters, context["gcov"]["path"], env, native)
+
     reports = {}
     for kind, (lines, inputs) in (
-        ("native", native_lines(output, suites, units, context["gcov"]["path"], env)),
+        ("native", (native, native_inputs)),
         ("python", python_lines(output, profile["python"], env)),
     ):
         path = output / f"{kind}.xml"
@@ -316,9 +387,12 @@ def main():
     current_context, _, _ = coverage_context(ROOT, database, profile, env)
     if state != source_state(ROOT) or database_hash != digest(database) or current_context != context:
         raise ValueError("Coverage inputs changed during execution")
+    if runtime and runtime_inputs(ROOT, database, runtime_build)[1] != runtime["inputs"]:
+        raise ValueError("Runtime coverage inputs changed during execution")
     receipt = output / "receipt.json"
     receipt.write_text(json.dumps({"schema": 2, "sources": state, "compile_database_sha256": database_hash,
-                                   "profile": profile, "context": context, "reports": reports},
+                                   "profile": profile, "context": context, "reports": reports,
+                                   **({"runtime": runtime} if runtime else {})},
                                   indent=2) + "\n")
     print(f"SONAR_COVERAGE_RECEIPT={receipt}")
 

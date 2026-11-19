@@ -26,12 +26,12 @@ mediante `NATIVE_CXXFLAGS`. Cada ejecución crea su propio directorio en
 mediante `make test-native-sanitized` con ASan y UBSan. Funciona sin SDK y
 los proveedores controlados se prueban por separado del motor.
 
-La extensión compila [composición y registro](../extension/extension.cpp),
-[resolución](../extension/bindings.cpp), [ciclo de vida de interfaces](../extension/sdk_lifecycle.cpp),
-[grabación de tablas](../extension/demo_tables.cpp), [transmisión](../extension/transmission.cpp)
-y [wrappers](../extension/wrappers.cpp) como unidades separadas. La declaración de hooks y detours permanece junto
-a su registro. Se conserva el orden de headers de allocators de Windows en
-[extension.h](../extension/extension.h).
+El [punto de entrada](../extension/extension.cpp) define la instancia y los
+bindings compartidos. El [ciclo de vida de los hooks](../extension/hooks/runtime_hooks.cpp)
+reúne las declaraciones de SourceHook y su registro. Los
+[detours](../extension/hooks/detours.cpp) mantienen juntos los callbacks, los
+trampolines y la tabla que controla su instalación y retirada. El orden de
+headers de allocators de Windows se define en [extension.h](../extension/extension.h).
 
 `make test-native` también ejecuta la serialización de tablas y clases con un
 buffer controlado, un lector independiente de los campos y un contador de

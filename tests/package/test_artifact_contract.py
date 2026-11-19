@@ -67,6 +67,15 @@ class ArtifactContractTest(unittest.TestCase):
                     contract_tool.products(build, "linux", inputs, MAP)
                 verify.assert_called_once_with(inputs)
 
+    def test_runtime_coverage_build_cannot_be_packaged(self):
+        with tempfile.TemporaryDirectory() as work:
+            build = Path(work)
+            with (patch.object(contract_tool, "source_digest", return_value="current"),
+                  patch.object(contract_tool, "binary_hashes", return_value={})):
+                contract_tool.record_build(build, "linux", "current", {}, MAP, coverage=True)
+                with self.assertRaisesRegex(ValueError, "instrumentado para cobertura"):
+                    contract_tool.products(build, "linux", None, MAP)
+
     def test_map_rejects_unknown_keys_at_every_level(self):
         for section in ((), ("build",), ("artifact",), ("artifact", "documentation")):
             with self.subTest(section=section):

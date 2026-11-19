@@ -11,7 +11,11 @@ FIXTURE = Path(__file__).with_name("fixtures") / "public-contract.json"
 
 
 def inventory(read):
-    extension = read("extension/extension.cpp")
+    extension = "\n".join(read(source) for source in (
+        "extension/extension.cpp",
+        "extension/hooks/detours.cpp",
+        "extension/hooks/runtime_hooks.cpp",
+    ))
     vsp = re.sub(r"//[^\n]*", "", read("vsp/plugin_vsp.cpp"))
     cvars = re.search(r'\bcvars\[\]\s*=\s*\{([^}]+)\}', vsp)
     return {

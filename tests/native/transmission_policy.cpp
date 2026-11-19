@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "transmission_policy.h"
+#include "hooks/transmission_policy.h"
 
 #include <cassert>
 #include <cstdio>
@@ -17,8 +17,57 @@ struct Writer
 	}
 };
 
+struct Viewer
+{
+	int team;
+	int GetTeamIndex() const { return team; }
+};
+
+struct Player
+{
+	const Viewer* info = nullptr;
+	bool sourceTV = false;
+
+	const Viewer* GetPlayerInfo() const { return info; }
+	bool IsSourceTV() const { return sourceTV; }
+};
+
+struct TransmitInfo { const int* m_pClientEnt; };
+
+static void CheckViewer()
+{
+	const int entity = 1;
+	const TransmitInfo info{&entity};
+	Player player;
+	Player* found = nullptr;
+	int lookups = 0;
+	auto lookup = [&](const int* client) {
+		assert(client == &entity);
+		++lookups;
+		return found;
+	};
+	auto transmission = [&](int original, const TransmitInfo* recipient) {
+		return AbilityTransmissionForViewer(original, 8, 1, recipient, lookup);
+	};
+
+	assert(transmission(3, nullptr) == 3 && lookups == 0);
+	assert(transmission(8, &info) == 8 && lookups == 0);
+	assert(transmission(3, &info) == 3 && lookups == 1);
+	found = &player;
+	assert(transmission(3, &info) == 3);
+	const Viewer playerInfo{2}, spectatorInfo{1};
+	player.info = &playerInfo;
+	assert(transmission(3, &info) == 3);
+	player.sourceTV = true;
+	assert(transmission(3, &info) == 8);
+	player.sourceTV = false;
+	player.info = &spectatorInfo;
+	assert(transmission(3, &info) == 8);
+}
+
 int main()
 {
+	CheckViewer();
 	assert(AbilityTransmission(3, 8, AbilityAudience::Player) == 3);
 	assert(AbilityTransmission(3, 8, AbilityAudience::SourceTV) == 8);
 	assert(AbilityTransmission(3, 8, AbilityAudience::Spectator) == 8);

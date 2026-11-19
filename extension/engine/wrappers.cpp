@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Extracted from SourceTV-Support by Evgeniy Kazakov and contributors.
 #include "extension.h"
-#include "wrappers.h"
+#include "engine/demo_writer.h"
+#include "engine/wrappers.h"
 
 
 void InvokeDataTable_WriteSendTablesBuffer(ServerClass* pClasses, bf_write* buf)

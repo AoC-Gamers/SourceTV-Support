@@ -20,6 +20,7 @@ def main():
     parser.add_argument("platform", choices=("linux", "windows"))
     for option in ("build", "venv"):
         parser.add_argument(f"--{option}", type=Path, required=True)
+    parser.add_argument("--coverage", action="store_true")
     add_input_arguments(parser)
     args = parser.parse_args()
 
@@ -29,6 +30,8 @@ def main():
     receipt.unlink(missing_ok=True)
     if sys.platform != {"linux": "linux", "windows": "win32"}[args.platform]:
         raise ValueError(f"El build {args.platform} requiere un host {args.platform}.")
+    if args.coverage and args.platform != "linux":
+        raise ValueError("La cobertura de SRCDS requiere Linux x86.")
     mapping = load_map()
     validate_map(mapping)
     dependencies = dependency_identities(args)
@@ -55,6 +58,8 @@ def main():
         "--swsdk-path", args.steamworks.resolve(),
     ]
 
+    if args.coverage:
+        config.append("--enable-coverage")
     digest = source_digest()
     subprocess.run(config, cwd=build, env=env, check=True)
     subprocess.run(
@@ -68,7 +73,7 @@ def main():
         raise ValueError("Las fuentes cambiaron durante la compilación. Repite el build.")
     if dependency_identities(args) != dependencies:
         raise ValueError("Las dependencias cambiaron durante la compilación. Repite el build.")
-    record_build(build, args.platform, digest, dependencies, mapping)
+    record_build(build, args.platform, digest, dependencies, mapping, coverage=args.coverage)
 
 
 if __name__ == "__main__":

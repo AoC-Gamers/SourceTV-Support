@@ -15,8 +15,8 @@ La comprobación de su efecto temprano en runtime queda pendiente.
 
 | Unidad | Responsabilidad y contratos sensibles |
 |---|---|
-| [Extensión](../extension/extension.cpp) y [header](../extension/extension.h) | Interfaces, activación y teardown, hooks, transmisión, serialización y Steam |
-| [Wrappers](../extension/wrappers.h) y [headers de motor](../extension/sdk/engine/clientframe.h) | Bases y slots, netprops, frames, allocators y archivo de demo |
+| [Extensión](../extension/extension.cpp), [hooks](../extension/hooks/runtime_hooks.cpp) y [detours](../extension/hooks/detours.cpp) | Interfaces, activación y retirada de hooks y detours |
+| [Wrappers](../extension/engine/wrappers.h) y [headers de motor](../extension/sdk/engine/clientframe.h) | Bases y slots, netprops, frames, allocators y archivo de demo |
 | [VSP](../vsp/plugin_vsp.cpp) | Factory y exposición temprana de cvars |
 | [AMBuilder de extensión](../extension/AMBuilder), [AMBuilder del VSP](../vsp/AMBuilder) y [gamedata](../addons/sourcemod/gamedata/sourcetvsupport.txt) | Unidades por producto y resolución por plataforma |
 

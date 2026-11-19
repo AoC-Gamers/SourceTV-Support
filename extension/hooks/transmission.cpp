@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // Extracted from SourceTV-Support by Evgeniy Kazakov and contributors.
 #include "extension.h"
-#include "transmission_policy.h"
-#include "wrappers.h"
+#include "hooks/transmission_policy.h"
+#include "engine/wrappers.h"
+#include "sdk/common/netmessages.h"
 
 #include <algorithm>
 

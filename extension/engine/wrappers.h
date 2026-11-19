@@ -1,8 +1,9 @@
 #ifndef _INCLUDE_WRAPPERS_H_
 #define _INCLUDE_WRAPPERS_H_
 
+#include <checksum_crc.h>
 #include <extensions/IBinTools.h>
-#include "engine_binding.h"
+#include "engine/engine_binding.h"
 
 #include <iserver.h>
 #include <ihltvdirector.h>
@@ -34,11 +35,11 @@ extern IPlayerInfoManager* playerinfomanager;
 #define TIME_TO_TICKS( dt )		( (int)( 0.5f + (float)(dt) / TICK_INTERVAL ) )
 
 class CDetour;
+class CHLTVDemoRecorder;
 
 extern int shookid_CHLTVDemoRecorder_RecordStringTables;
 extern int shookid_CHLTVDemoRecorder_RecordServerClasses;
 
-extern void* pfn_DataTable_WriteSendTablesBuffer;
 extern void* pfn_SteamGameServer_GetHSteamPipe;
 extern void* pfn_SteamGameServer_GetHSteamUser;
 extern void* pfn_SteamInternal_CreateInterface;
@@ -46,8 +47,6 @@ extern void* pfn_SteamInternal_GameServer_Init;
 extern void* pfn_OpenSocketInternal;
 
 extern CDetour* detour_SteamInternal_GameServer_Init;
-
-void InvokeDataTable_WriteSendTablesBuffer(ServerClass* pClasses, bf_write* buf);
 
 // Steam API
 #if SOURCE_ENGINE == SE_LEFT4DEAD2

@@ -24,13 +24,12 @@
 #include <ihltv.h>
 
 #include <os/am-shared-library.h>
-#include <os/am-path.h>
 
 // Metamod Source
 #include <sourcehook.h>
 
-#include "runtime_resources.h"
-#include "runtime_lifecycle.h"
+#include "core/runtime_resources.h"
+#include "core/runtime_lifecycle.h"
 
 #if defined _WIN32
 #	define LIBSTEAMAPI_FILE "steam_api.dll"
@@ -38,8 +37,9 @@
 #	define LIBSTEAMAPI_FILE "libsteam_api.so"
 #endif
 
-#include "sdk/engine/hltvdemo.h"
-#include "sdk/common/netmessages.h"
+class CLC_SplitPlayerConnect;
+struct NetMessageCvar_t;
+class SVC_ServerInfo;
 
 #if SOURCE_ENGINE == SE_LEFT4DEAD2 && !defined _WIN32
 using ConnectPlayers = CUtlVector<CLC_SplitPlayerConnect>;
@@ -58,9 +58,6 @@ enum ESocketIndex_t
 
 class IClient;
 
-#define CONNECTIONLESS_HEADER			0xFFFFFFFF	// all OOB packet start with this sequence
-#define S2C_CHALLENGE			'A' // + challenge value
-#define S2C_CONNREJECT			'9'  // Special protocol for rejected connections.
 #define PORT_SERVER			27015	// Default server port, UDP/TCP
 
 class SMExtension :
@@ -76,6 +73,8 @@ private:
 	bool CreateDetours(char* error, size_t maxlength);
 	bool CreateVCalls(char* error, size_t maxlength);
 	bool EnableDetours(char* error, size_t maxlength);
+	static void DisableDetours();
+	static void ClearDetourTrampolines();
 	bool BindHLTVServer(IHLTVServer* server, char* error, size_t maxlength);
 	void RepairHLTVServer(IHLTVServer* server);
 	bool BindSteamLogOff(char* error, size_t maxlength);

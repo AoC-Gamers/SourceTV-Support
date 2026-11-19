@@ -377,9 +377,14 @@ class ExtensionConfig(object):
     return self.StaticLibraryBuilder(compiler, name)
 
   def ConfigureForExtension(self, context, compiler):
+    if builder.options.enable_coverage:
+      compiler.cxxflags += ['--coverage', '-fprofile-abs-path', '-O0']
+      compiler.linkflags += ['--coverage']
+    compiler.cxxincludes.append(context.currentSourcePath)
+    local_sdk = os.path.join(context.currentSourcePath, 'sdk')
+    if os.path.isdir(local_sdk):
+      compiler.cxxincludes.append(local_sdk)
     compiler.cxxincludes += [
-      os.path.join(context.currentSourcePath),
-      os.path.join(context.currentSourcePath, 'sdk'),
       os.path.join(self.sm_root, 'public'),
       os.path.join(self.sm_root, 'public', 'extensions'),
       os.path.join(self.sm_root, 'sourcepawn', 'include'),

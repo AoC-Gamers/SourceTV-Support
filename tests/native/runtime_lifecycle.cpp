@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-only
-#include "runtime_resources.h"
-#include "runtime_lifecycle.h"
-#include "steam_runtime.h"
+#include "core/runtime_resources.h"
+#include "core/runtime_lifecycle.h"
+#include "core/steam_runtime.h"
 
 #include <algorithm>
 #include <array>

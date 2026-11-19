@@ -50,6 +50,12 @@ build-exts-linux build-exts-windows:
 	$(PYTHON) "$(SCRIPT_DIR)/build/build-native.py" "$(PLATFORM)" \
 	  --build "$(BUILD_DIR)" --venv "$(VENV_DIR)" $(NATIVE_INPUTS)
 
+.PHONY: build-coverage-linux
+build-coverage-linux: PLATFORM := linux
+build-coverage-linux:
+	$(PYTHON) "$(SCRIPT_DIR)/build/build-native.py" "linux" --coverage \
+	  --build "$(BUILD_DIR)" --venv "$(VENV_DIR)" $(NATIVE_INPUTS)
+
 ARTIFACT_TOOL = $(PYTHON) "$(SCRIPT_DIR)/package/artifact_contract.py"
 ARTIFACT_ARGS = "$(PLATFORM)" --build "$(BUILD_DIR)" --dist "$(DIST_DIR)" --channel "$(RELEASE_CHANNEL)" $(NATIVE_INPUTS)
 
@@ -72,7 +78,7 @@ test:
 	$(PYTHON) -B -m unittest discover -s "$(ROOT_DIR)/tests/package"
 
 NATIVE_CXXFLAGS ?= -m32 -std=c++17 -Wall -Wextra
-NATIVE_TESTS := frame_retention:.:test-native demo_payload:.:demo_payload transmission_policy:.:transmission_policy runtime_lifecycle:.:runtime_lifecycle
+NATIVE_TESTS := spectator_reply:.:spectator_reply engine_values:.:engine_values frame_retention:.:test-native demo_payload:.:demo_payload transmission_policy:.:transmission_policy runtime_lifecycle:.:runtime_lifecycle
 NATIVE_SANITIZER_FLAGS := -O1 -g -fno-omit-frame-pointer -fsanitize=address,undefined -fno-sanitize-recover=all -fno-pie -no-pie
 
 .PHONY: test-native-sanitized
@@ -137,7 +143,7 @@ test-abi:
 
 .PHONY: test-vsp
 test-vsp: PLATFORM := linux
-test-vsp: build-exts-linux
+test-vsp: $(if $(filter 1,$(COVERAGE_BUILD)),build-coverage-linux,build-exts-linux)
 	@mkdir -p "$(ROOT_DIR)/.build"
 	@set -euo pipefail; \
 	  output="$$(mktemp -d "$(ROOT_DIR)/.build/vsp.XXXXXX")"; \
@@ -170,4 +176,5 @@ test-coverage-tooling:
 
 test-coverage: build-exts-linux
 	$(PYTHON) "$(SCRIPT_DIR)/tools/local_coverage.py" --compile-commands "$(BUILD_DIR)/compile_commands.json" --coverage-python "$(COVERAGE_PYTHON)" \
-	  --cxx="$(CXX)" --native-flags="$(NATIVE_CXXFLAGS)" --native-tests="$(NATIVE_TESTS)" --gcov="$(GCOV)"
+	  --cxx="$(CXX)" --native-flags="$(NATIVE_CXXFLAGS)" --native-tests="$(NATIVE_TESTS)" --gcov="$(GCOV)" \
+	  $(if $(COVERAGE_RUNTIME_BUILD),--runtime-build "$(COVERAGE_RUNTIME_BUILD)")
