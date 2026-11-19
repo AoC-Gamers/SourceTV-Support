@@ -1,21 +1,25 @@
-# Aceptación de SourceTV en SRCDS
+# Validación de SourceTV-Support en SRCDS
 
-Prueba cada plataforma en una instalación aislada con Metamod y SourceMod.
-Registra la versión de L4D2, la plataforma, la versión de SourceMod y las
-huellas de los módulos del juego y de los ZIP instalados. Conserva logs y demos
-de pruebas fuera del paquete.
+## Antes de probar
 
-| Escenario | Comprobación |
+Usa un SRCDS de pruebas con las [dependencias de instalación](../installation/README.md).
+Registra SO, versión y build de L4D2, versiones de Metamod:Source y SourceMod, revisión
+disponible y SHA-256 de los ZIP y binarios cargados. Conserva logs, transcripciones y demos
+fuera del instalador.
+
+Para revisar una demo, copia el archivo `.dem` del servidor al directorio `left4dead2/` del
+cliente y ejecuta `playdemo <nombre>` en su consola. Verifica la reproducción hasta el cierre.
+
+## Escenarios
+
+| Escenario | Resultado esperado |
 | --- | --- |
-| Primer mapa | Con el VDF de Support y `-hltv +tv_enable 1`, verifica el diagnóstico del VSP y que SourceTV emita en ese mapa. Comprueba ambas extensiones con `sm exts list`. |
-| Coexistencia | En una sesión carga Manager antes de Support y en otra Support antes de Manager. Descarga y recarga cada una con la otra presente. Comprueba grabación, conexión de un espectador, mensajes locales y rechazo de pantalla dividida. |
-| Grabación y cambio de mapa | Inicia una demo, toma un snapshot, intenta pararla con un token ajeno y confirma que sigue activa. Detén con el propietario. Cambia de mapa, verifica la nueva instancia y reproduce las demos en un cliente L4D2 compatible. |
-| Cambio de dependencias | En la instancia de pruebas, retira y restablece BinTools y SDKTools. Comprueba disponibilidad, reenganche de hooks y ausencia de accesos al proveedor descargado. |
-| Steam | Repite los escenarios con SteamWorks si forma parte de la instalación. Comprueba inicialización, reinicio y `LogOff`. Cerrar HLTV debe conservar la sesión del servidor principal mientras este siga activo. |
+| Primer mapa | Con el VDF de Support y `+tv_enable 1`, el log muestra el resultado del VSP y el recuento de cvars. **SourceTV Support** figura en `sm exts list`. Un espectador puede entrar en el primer mapa. |
+| Transmisión y grabación | Con un jugador y un espectador, inicia y cierra una demo y comprueba que se reproduce. Repite tras un cambio de mapa y comprueba que SourceTV vuelve a emitir. |
+| Convivencia | Carga Support y Manager en ambos órdenes. Descarga y recarga cada extensión mientras la otra sigue activa. Reconecta al espectador y comprueba mensajes locales, grabación y rechazo de pantalla dividida. |
+| Dependencias | Retira y restablece BinTools y SDKTools en la instancia de pruebas. Comprueba que Support retira las llamadas a BinTools cuando se descarga y que el servidor conserva el estado esperado. |
+| Steam | Comprueba el estado de Steam antes y después de `tv_stop`. Al cerrar SourceTV, el jugador y la sesión Steam del servidor principal deben seguir activos. Si la instalación usa SteamWorks, repite con las dos extensiones cargadas. Registra por separado el cierre de SRCDS. |
 
-En Linux, `make test-vsp` valida el binario y el factory con el SDK fijado.
-`make test-abi` prueba un hook manual con SourceHook y un proveedor controlado.
-
-Las pruebas con proveedores controlados validan los escenarios del harness.
-Para aceptar la coexistencia completa, registra por separado los escenarios
-ejecutados en SRCDS Linux y Windows y los que queden pendientes.
+En Linux, `make test-vsp` comprueba el binario del VSP y su interfaz de carga con el SDK fijado.
+`make test-abi` comprueba un hook manual de SourceHook con un proveedor controlado. Consulta las
+[pruebas automatizadas](../../tests/README.md) para sus alcances y requisitos.

@@ -1,84 +1,22 @@
 # SourceTV-Support
 
-Introduction
-------
-SourceMod extension that fixes broken broadcasting/demo recording features in Left 4 Dead 2.
+Extensión de SourceMod que corrige problemas de transmisión, conexión de espectadores y grabación de demos de SourceTV en servidores dedicados de Left 4 Dead 2.
 
-More information about SourceTV on wiki: https://developer.valvesoftware.com/wiki/SourceTV
+Gracias a Evgeniy «shqke» Kazakov y a quienes contribuyeron al [proyecto original `shqke/sourcetvsupport`](https://github.com/shqke/sourcetvsupport). El trabajo de AoC-Gamers se centra en la calidad del código, las pruebas y la distribución de paquetes instalables para Linux y Windows.
 
-Requirements
-------
-- [SourceMod](https://www.sourcemod.net/) y Metamod:Source 1.12 para la matriz de build AoC. El README heredado declaraba SourceMod 1.8+; la carga con versiones anteriores a 1.12 queda pendiente de validar.
+> **Linux x86.** Los ZIP Develop de AoC verificados se compilaron con Ubuntu 26.04. El paquete Develop verificado requiere glibc 2.43, superior a la 2.39 incluida en Ubuntu 24.04. Consulta los [requisitos del servidor](docs/installation/README.md#compatibilidad-en-linux).
 
-Supported Games
-------
-- [Left 4 Dead 2](https://store.steampowered.com/app/550/Left_4_Dead_2/)
+## Instalación rápida
 
-Instalación y compilación
-------
-El paquete contiene la extensión de SourceMod, el VSP y los recursos de carga
-para Left 4 Dead 2 x86. Copia el árbol `addons/` del ZIP de la plataforma a
-`left4dead2/`.
+1. Usa un servidor dedicado de Left 4 Dead 2 de 32 bits con Metamod:Source y SourceMod. Las versiones de referencia son 1.12 de ambos.
+2. Descarga el ZIP de Linux o Windows desde [Releases](https://github.com/AoC-Gamers/SourceTV-Support/releases).
+3. Con el servidor detenido, copia el árbol `addons/` del ZIP a `left4dead2/`, conservando las rutas.
+4. Inicia el servidor con `+tv_enable 1`. Verifica la extensión con `sm exts list` y busca `[STVS] VSP early setup complete` en el log de arranque.
 
-1. Instala Metamod:Source y SourceMod.
-2. Conserva `addons/sourcetvsupport_vsp_l4d2.vdf` para cargar el VSP.
-3. Usa `-hltv` para habilitar transmisiones y `+tv_enable 1` para habilitar
-   SourceTV desde el primer mapa. Configura `tv_port` si necesitas otro puerto.
-4. Confirma la carga de la extensión con `sm exts list`. Para el VSP, busca
-   `[STVS] VSP early setup complete` en el log de arranque y comprueba que
-   `tv_enable` vale `1` desde el primer mapa y SourceTV acepta espectadores.
+## Documentación
 
-El VDF carga el VSP al arrancar. El VSP retira `FCVAR_DEVELOPMENTONLY` de
-las cvars SourceTV y auxiliares que encuentra, registra cuántas faltan y
-solicita su descarga. Su salida deliberada explica que no quede listado en
-`plugin_print`. El mensaje `[STVS] VSP setup failed` identifica un fallo
-de acceso a la interfaz de cvars del motor.
+- [Guía de instalación](docs/installation/README.md) con verificación, actualización y reversión.
+- [Funcionamiento de SourceTV](docs/sourcetv/README.md).
+- [Índice de documentación](docs/README.md) con compilación, dependencias y pruebas.
 
-Consulta la [guía de compilación](docs/build/README.md). Los ZIP están en
-[Releases](https://github.com/AoC-Gamers/SourceTV-Support/releases).
-
-### Actualización y reversión
-
-Detén SRCDS y guarda los binarios y recursos SourceTV de la instalación actual.
-Copia el árbol `addons/` del ZIP nuevo al directorio del juego y repite la
-comprobación de carga. Para revertir, detén el servidor, restaura esos archivos desde la copia y
-retira los archivos añadidos por la actualización antes de volver a iniciar SRCDS.
-
-Also Recommended
-------
-[[L4D/2] Unlink Camera Entities](https://github.com/shqke/sp_public/tree/master/disable_cameras) - fixes multiple potential visual bugs on round restart, such as missing HUD and viewmodel for spectators after "finale vehicle escape" sequence team swap.
-
-[[L4D/2] Automated Demo Recording](https://github.com/shqke/sp_public/tree/master/autorecorder) - automates demo recording process based on player count.
-
-[Manage HLTV Cameras](https://github.com/shqke/sp_public/tree/master/hltv_cameras) - adds missing fixed cameras for HLTV Director.
-
-Command Line Parameters
-------
-- `+tv_enable 1` - Make SourceTV available on first map start (don't require to `changelevel`/`map`)
-- `-hltv` - Enable broadcasting feature (clients can connect to a port specified in `tv_port` to spectate the game)
-- `+tv_port <port>` - Set the SourceTV host port (default 27020). Must be set as srcds start parameter
-- `-tvmasteronly` - SourceTV can only serve one client and can't be used as relay proxy
-
-Fixed Issues
-------
-- Property **CHLTVServer::stringTableCRC** was never set
-- Insufficient buffer size to store string tables and/or data tables
-- Hibernation was causing a consistent memory leak
-- Cvar `tv_enable` and some others were not available from command line
-- HLTV clients were forced to interact with lobby system
-- (L4D2) **ISteamGameServer** interface was failing to initiate due to bound HLTV port being passed as query port
-- Server would crash on HLTV client disconnect (auth ticket method)
-- (L4D2) Event `player_full_connect` was sent for HLTV clients userids
-- (L4D2) **ISteamGameServer** interface would log off whenever **CHLTVServer** was shutting down
-- SourceTV bot was never moved into Spectator team
-- SourceTV bot doesn't take a human slot and doesn't count as a potential voter
-- "CUtlRBTree overflow" on level transition
-- Broken demos on early recording (tv_autorecord)
-- Disabled `tv_transmitall` would leave bots PVS data empty
-- (feature) Allowed addons for HLTV clients and in demo playback
-
-Known Issues
-------
-- Missing arms models/blinking world model attachments during SourceTV footage playback
-  - Needed modifications on game client
-- Relay feature is broken
+Consulta la [licencia](LICENSE), las [atribuciones](NOTICE.md) y el [historial de cambios](CHANGELOG.md).

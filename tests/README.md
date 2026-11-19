@@ -71,7 +71,7 @@ Solo se retira `FCVAR_DEVELOPMENTONLY` de las variables previstas. Se conservan
 los valores, los demás flags y las variables ajenas.
 
 Para verificar el orden de carga en SRCDS, instala el ZIP de la plataforma con
-su VDF y arranca L4D2 x86 con `-hltv +tv_enable 1`. Registra el mensaje
+su VDF y arranca L4D2 x86 con `+tv_enable 1`. Registra el mensaje
 `[STVS] VSP early setup complete` y los recuentos de cvars en el log. Comprueba
 `tv_enable` y conecta como espectador durante el primer mapa, antes de cambiar
 de nivel. El VSP solicita descargarse al terminar. Comprueba la extensión
