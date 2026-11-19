@@ -42,6 +42,7 @@
 - El recibo de cobertura local detecta cambios en headers, dependencias,
   órdenes, toolchain y pruebas antes de importar los informes.
 
-- Cada push a `develop` publica la prerelease con los ZIP validados de Linux y Windows.
+- Los pushes a `develop` y a la rama principal (`master` o `main`) publican
+  los ZIP validados de Linux y Windows en Develop y Latest, respectivamente.
 
 - GNU Make centraliza la preparación de dependencias, la compilación, las pruebas y el empaquetado local y en CI.

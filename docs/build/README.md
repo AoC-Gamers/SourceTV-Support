@@ -47,11 +47,11 @@ Los ZIP de runs de `develop` usan el canal Develop. Los runs de `master` o
 del run. El target `release-*` genera el archivo local. Los tags `v*` generan
 ZIP versionados. Los ZIP que se generen en otras ramas usan el SHA corto como identificador.
 
-Cada push a `develop` publica ambos ZIP del mismo run en la prerelease
-`channel/develop` después de validar los paquetes de Linux y Windows.
-La ejecución manual con `publish_release` también permite actualizar
-`channel/develop`, actualizar `channel/latest` desde `master` o `main`,
-y publicar un tag versionado. Las actualizaciones de canal pueden dejar una
+Cada push a `develop` actualiza la prerelease `channel/develop`. Cada push a
+`master` o `main` actualiza la release `channel/latest`. Ambas publican los ZIP
+del mismo workflow tras validar los paquetes de Linux y Windows.
+La ejecución manual con `publish_release` permite actualizar el canal de la rama
+o publicar un tag versionado. Las actualizaciones de canal pueden dejar una
 pausa entre la retirada de la release anterior y la publicación de la nueva.
 Si falla la subida, puedes reintentar la ejecución de Actions.
 
